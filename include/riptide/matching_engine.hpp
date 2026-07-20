@@ -19,6 +19,8 @@ namespace riptide {
 class MatchingEngine {
  public:
   std::vector<Event> new_order(NewOrderRequest request);
+  std::vector<Event> cancel(OrderId id);
+  std::vector<Event> modify(ModifyRequest request);
 
   const OrderBook& book() const { return book_; }
 

@@ -122,4 +122,94 @@ std::vector<Event> MatchingEngine::new_order(NewOrderRequest request) {
   return events;
 }
 
+std::vector<Event> MatchingEngine::cancel(OrderId id) {
+  std::vector<Event> events;
+
+  const Order* existing = book_.find(id);
+  if (existing == nullptr) {
+    events.push_back(CancelRejected{.id = id, .reason = RejectReason::UnknownOrderId});
+    return events;
+  }
+
+  const Quantity remaining = existing->remaining;
+  book_.remove(id);
+  events.push_back(
+      Cancelled{.id = id, .reason = CancelReason::UserRequested, .remaining_cancelled = remaining});
+  return events;
+}
+
+std::vector<Event> MatchingEngine::modify(ModifyRequest request) {
+  std::vector<Event> events;
+
+  const Order* existing = book_.find(request.id);
+  if (existing == nullptr) {
+    events.push_back(ModifyRejected{.id = request.id, .reason = RejectReason::UnknownOrderId});
+    return events;
+  }
+
+  // Only Limit GTC orders ever rest, so existing->price is always set.
+  const Price new_price = request.price.value_or(*existing->price);
+  const Quantity new_quantity = request.quantity.value_or(existing->remaining);
+
+  if (new_price <= 0) {
+    events.push_back(ModifyRejected{.id = request.id, .reason = RejectReason::InvalidPrice});
+    return events;
+  }
+  if (new_quantity == 0) {
+    events.push_back(ModifyRejected{.id = request.id, .reason = RejectReason::InvalidQuantity});
+    return events;
+  }
+
+  const bool price_changed = new_price != *existing->price;
+  const bool quantity_increased = new_quantity > existing->remaining;
+  const bool lost_priority = price_changed || quantity_increased;
+
+  if (!lost_priority) {
+    // Quantity decrease (or no change) at the same price can't newly
+    // cross the book — a resting order never crosses by construction, and
+    // shrinking it only makes that less true — so there's nothing to
+    // match here, just an in-place size update that keeps FIFO position.
+    const Sequence sequence = existing->sequence;
+    book_.set_remaining_in_place(request.id, new_quantity);
+    events.push_back(Modified{.id = request.id,
+                               .new_price = new_price,
+                               .new_quantity = new_quantity,
+                               .lost_priority = false,
+                               .sequence = sequence});
+    return events;
+  }
+
+  // Price change or quantity increase: loses time priority. Implemented as
+  // remove + re-submit at the back of the (possibly new) price level's
+  // queue — which also means a replace that reprices into crossing
+  // territory executes immediately, exactly like a new marketable limit
+  // order would.
+  const Side side = existing->side;
+  const TimeInForce tif = existing->tif;
+  book_.remove(request.id);
+
+  const Sequence sequence = next_sequence_++;
+  events.push_back(Modified{.id = request.id,
+                             .new_price = new_price,
+                             .new_quantity = new_quantity,
+                             .lost_priority = true,
+                             .sequence = sequence});
+
+  Quantity remaining = new_quantity;
+  MatchAgainstBook(request.id, side, new_price, remaining, events);
+
+  if (remaining > 0) {
+    book_.insert(Order{.id = request.id,
+                        .side = side,
+                        .type = OrderType::Limit,
+                        .tif = tif,
+                        .price = new_price,
+                        .quantity = new_quantity,
+                        .remaining = remaining,
+                        .sequence = sequence});
+  }
+
+  return events;
+}
+
 }  // namespace riptide

@@ -292,5 +292,218 @@ TEST(MatchingEngine, DuplicateOrderIdIsRejectedAndLeavesOriginalIntact) {
   EXPECT_EQ(original->remaining, 10u);
 }
 
+// ---- Cancel ----------------------------------------------------------
+
+TEST(MatchingEngine, CancelOfRestingOrderRemovesItAndEmitsCancelled) {
+  MatchingEngine engine;
+  engine.new_order(Limit(1, Side::Buy, 1000, 10));
+
+  auto events = engine.cancel(1);
+
+  ASSERT_EQ(events.size(), 1u);
+  const auto* cancelled = EventAt<Cancelled>(events, 0);
+  ASSERT_NE(cancelled, nullptr);
+  EXPECT_EQ(cancelled->reason, CancelReason::UserRequested);
+  EXPECT_EQ(cancelled->remaining_cancelled, 10u);
+  EXPECT_EQ(engine.book().find(1), nullptr);
+}
+
+TEST(MatchingEngine, CancelOfUnknownIdIsRejected) {
+  MatchingEngine engine;
+  auto events = engine.cancel(999);
+
+  ASSERT_EQ(events.size(), 1u);
+  const auto* rejected = EventAt<CancelRejected>(events, 0);
+  ASSERT_NE(rejected, nullptr);
+  EXPECT_EQ(rejected->reason, RejectReason::UnknownOrderId);
+}
+
+TEST(MatchingEngine, CancelOfAlreadyFullyFilledOrderIsRejected) {
+  MatchingEngine engine;
+  engine.new_order(Limit(1, Side::Sell, 1000, 5));
+  engine.new_order(Limit(2, Side::Buy, 1000, 5));  // fully fills order 1
+
+  auto events = engine.cancel(1);
+
+  ASSERT_EQ(events.size(), 1u);
+  const auto* rejected = EventAt<CancelRejected>(events, 0);
+  ASSERT_NE(rejected, nullptr);
+  EXPECT_EQ(rejected->reason, RejectReason::UnknownOrderId);
+}
+
+TEST(MatchingEngine, CancelOfTopOfBookOrderExposesNextBestPrice) {
+  MatchingEngine engine;
+  engine.new_order(Limit(1, Side::Buy, 1005, 10));
+  engine.new_order(Limit(2, Side::Buy, 1000, 10));
+
+  engine.cancel(1);
+
+  EXPECT_EQ(engine.book().best_price(Side::Buy), std::optional<Price>{1000});
+}
+
+TEST(MatchingEngine, CancelThatEmptiesAPriceLevelRemovesTheLevel) {
+  MatchingEngine engine;
+  engine.new_order(Limit(1, Side::Buy, 1000, 10));
+
+  engine.cancel(1);
+
+  EXPECT_EQ(engine.book().best_price(Side::Buy), std::nullopt);
+  EXPECT_TRUE(engine.book().bid_levels().empty());
+}
+
+TEST(MatchingEngine, DoubleCancelSecondAttemptIsRejected) {
+  MatchingEngine engine;
+  engine.new_order(Limit(1, Side::Buy, 1000, 10));
+  engine.cancel(1);
+
+  auto events = engine.cancel(1);
+
+  ASSERT_EQ(events.size(), 1u);
+  EXPECT_NE(EventAt<CancelRejected>(events, 0), nullptr);
+}
+
+// ---- Modify ------------------------------------------------------------
+
+TEST(MatchingEngine, ModifyQuantityDecreaseKeepsPriorityAndQueuePosition) {
+  MatchingEngine engine;
+  engine.new_order(Limit(1, Side::Buy, 1000, 10));
+  engine.new_order(Limit(2, Side::Buy, 1000, 5));
+
+  auto events =
+      engine.modify(ModifyRequest{.id = 1, .price = std::nullopt, .quantity = Quantity{4}});
+
+  ASSERT_EQ(events.size(), 1u);
+  const auto* modified = EventAt<Modified>(events, 0);
+  ASSERT_NE(modified, nullptr);
+  EXPECT_FALSE(modified->lost_priority);
+  EXPECT_EQ(modified->new_quantity, 4u);
+
+  // Still first in the queue: a resting sell for 4 should fill order 1
+  // entirely and leave order 2 untouched.
+  engine.new_order(Limit(3, Side::Sell, 1000, 4));
+  EXPECT_EQ(engine.book().find(1), nullptr);
+  const Order* second = engine.book().find(2);
+  ASSERT_NE(second, nullptr);
+  EXPECT_EQ(second->remaining, 5u);
+}
+
+TEST(MatchingEngine, ModifyQuantityIncreaseLosesPriorityAndMovesToBackOfQueue) {
+  MatchingEngine engine;
+  engine.new_order(Limit(1, Side::Buy, 1000, 5));
+  engine.new_order(Limit(2, Side::Buy, 1000, 5));
+
+  auto events =
+      engine.modify(ModifyRequest{.id = 1, .price = std::nullopt, .quantity = Quantity{8}});
+
+  ASSERT_EQ(events.size(), 1u);
+  const auto* modified = EventAt<Modified>(events, 0);
+  ASSERT_NE(modified, nullptr);
+  EXPECT_TRUE(modified->lost_priority);
+
+  // Order 2 is now ahead of order 1: a resting sell for 5 should fill
+  // order 2 entirely, not order 1.
+  engine.new_order(Limit(3, Side::Sell, 1000, 5));
+  EXPECT_EQ(engine.book().find(2), nullptr);
+  const Order* first = engine.book().find(1);
+  ASSERT_NE(first, nullptr);
+  EXPECT_EQ(first->remaining, 8u);
+}
+
+TEST(MatchingEngine, ModifyPriceChangeLosesPriorityAndMovesLevel) {
+  MatchingEngine engine;
+  engine.new_order(Limit(1, Side::Buy, 1000, 10));
+
+  auto events = engine.modify(ModifyRequest{.id = 1, .price = Price{999}, .quantity = std::nullopt});
+
+  ASSERT_EQ(events.size(), 1u);
+  const auto* modified = EventAt<Modified>(events, 0);
+  ASSERT_NE(modified, nullptr);
+  EXPECT_TRUE(modified->lost_priority);
+  EXPECT_EQ(modified->new_price, 999);
+
+  EXPECT_EQ(engine.book().best_price(Side::Buy), std::optional<Price>{999});
+  EXPECT_TRUE(engine.book().bid_levels().count(1000) == 0);
+}
+
+TEST(MatchingEngine, ModifyThatRepricesIntoCrossingExecutesImmediately) {
+  MatchingEngine engine;
+  engine.new_order(Limit(1, Side::Sell, 1000, 10));
+  engine.new_order(Limit(2, Side::Buy, 990, 5));  // doesn't cross yet
+
+  auto events = engine.modify(ModifyRequest{.id = 2, .price = Price{1000}, .quantity = std::nullopt});
+
+  ASSERT_EQ(events.size(), 2u);  // Modified + Trade
+  EXPECT_NE(EventAt<Modified>(events, 0), nullptr);
+  const auto* trade = EventAt<Trade>(events, 1);
+  ASSERT_NE(trade, nullptr);
+  EXPECT_EQ(trade->quantity, 5u);
+  EXPECT_EQ(trade->aggressor_id, 2u);
+
+  EXPECT_EQ(engine.book().find(2), nullptr);  // fully filled by the reprice, nothing rests
+  const Order* resting_sell = engine.book().find(1);
+  ASSERT_NE(resting_sell, nullptr);
+  EXPECT_EQ(resting_sell->remaining, 5u);
+}
+
+TEST(MatchingEngine, ModifyOfUnknownIdIsRejected) {
+  MatchingEngine engine;
+  auto events = engine.modify(ModifyRequest{.id = 999, .price = std::nullopt, .quantity = Quantity{5}});
+
+  ASSERT_EQ(events.size(), 1u);
+  const auto* rejected = EventAt<ModifyRejected>(events, 0);
+  ASSERT_NE(rejected, nullptr);
+  EXPECT_EQ(rejected->reason, RejectReason::UnknownOrderId);
+}
+
+TEST(MatchingEngine, ModifyToZeroQuantityIsRejected) {
+  MatchingEngine engine;
+  engine.new_order(Limit(1, Side::Buy, 1000, 10));
+
+  auto events = engine.modify(ModifyRequest{.id = 1, .price = std::nullopt, .quantity = Quantity{0}});
+
+  ASSERT_EQ(events.size(), 1u);
+  const auto* rejected = EventAt<ModifyRejected>(events, 0);
+  ASSERT_NE(rejected, nullptr);
+  EXPECT_EQ(rejected->reason, RejectReason::InvalidQuantity);
+  // Rejected modify must not mutate the order.
+  const Order* unchanged = engine.book().find(1);
+  ASSERT_NE(unchanged, nullptr);
+  EXPECT_EQ(unchanged->remaining, 10u);
+}
+
+TEST(MatchingEngine, ModifyToNonPositivePriceIsRejected) {
+  MatchingEngine engine;
+  engine.new_order(Limit(1, Side::Buy, 1000, 10));
+
+  auto events = engine.modify(ModifyRequest{.id = 1, .price = Price{0}, .quantity = std::nullopt});
+
+  ASSERT_EQ(events.size(), 1u);
+  const auto* rejected = EventAt<ModifyRejected>(events, 0);
+  ASSERT_NE(rejected, nullptr);
+  EXPECT_EQ(rejected->reason, RejectReason::InvalidPrice);
+}
+
+TEST(MatchingEngine, ModifyOfPartiallyFilledOrderOperatesOnRemainingNotOriginal) {
+  MatchingEngine engine;
+  engine.new_order(Limit(1, Side::Buy, 1000, 10));
+  engine.new_order(Limit(2, Side::Sell, 1000, 6));  // fills 6, leaves order 1 with remaining = 4
+
+  const Order* partially_filled = engine.book().find(1);
+  ASSERT_NE(partially_filled, nullptr);
+  ASSERT_EQ(partially_filled->remaining, 4u);
+
+  // Increasing to 5 is an increase relative to the current remaining (4),
+  // even though it's still less than the original quantity (10) — so it
+  // must lose priority.
+  auto events =
+      engine.modify(ModifyRequest{.id = 1, .price = std::nullopt, .quantity = Quantity{5}});
+
+  ASSERT_EQ(events.size(), 1u);
+  const auto* modified = EventAt<Modified>(events, 0);
+  ASSERT_NE(modified, nullptr);
+  EXPECT_TRUE(modified->lost_priority);
+  EXPECT_EQ(modified->new_quantity, 5u);
+}
+
 }  // namespace
 }  // namespace riptide

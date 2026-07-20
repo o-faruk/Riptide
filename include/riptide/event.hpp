@@ -1,6 +1,5 @@
 #pragma once
 
-#include <optional>
 #include <variant>
 
 #include "riptide/types.hpp"
@@ -14,12 +13,17 @@ struct Accepted {
   Sequence sequence;
 };
 
+// Shared across new_order/cancel/modify: it's the same underlying question
+// each time ("why didn't this request go through"), and cancel/modify need
+// the same InvalidQuantity/InvalidPrice checks new_order does, so one enum
+// beats three overlapping ones.
 enum class RejectReason {
   InvalidQuantity,     // quantity == 0
   InvalidPrice,        // Limit order with price <= 0, or Market order with a price set
-  DuplicateOrderId,    // id already belongs to a live order
+  DuplicateOrderId,    // new_order: id already belongs to a live order
   InvalidTimeInForce,  // e.g. Market + GTC: a market order can never rest
   FokUnfilled,         // FOK could not be fully satisfied; no trades occurred
+  UnknownOrderId,      // cancel/modify: id is not a live order
 };
 
 // Order never entered the book at all. No Accepted event precedes this.
@@ -53,26 +57,24 @@ struct Cancelled {
 // A successful cancel/replace. `lost_priority` tells consumers whether the
 // order moved to the back of its (possibly new) price level's queue —
 // true iff price changed or quantity increased, per the documented rule.
+// new_price/new_quantity are always well-defined: only Limit GTC orders
+// ever rest, so a live order being modified always has a real price.
 struct Modified {
   OrderId id;
-  std::optional<Price> new_price;
+  Price new_price;
   Quantity new_quantity;
   bool lost_priority;
   Sequence sequence;  // unchanged if priority kept, newly assigned if lost
 };
 
-enum class OrderLookupFailure {
-  UnknownOrderId,  // id was never live, or is already in a terminal state
-};
-
 struct CancelRejected {
   OrderId id;
-  OrderLookupFailure reason;
+  RejectReason reason;  // always UnknownOrderId in practice
 };
 
 struct ModifyRejected {
   OrderId id;
-  OrderLookupFailure reason;
+  RejectReason reason;  // UnknownOrderId, InvalidPrice, or InvalidQuantity
 };
 
 using Event = std::variant<Accepted, Rejected, Trade, Cancelled, Modified, CancelRejected,
