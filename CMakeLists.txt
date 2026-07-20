@@ -14,21 +14,21 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(RIPTIDE_BUILD_TESTS "Build the GoogleTest suite" ON)
-option(RIPTIDE_BUILD_BENCH "Build the Google Benchmark harness" OFF)
+# Gates only the Google-Benchmark-dependent microbenchmark target inside
+# bench/ (see bench/CMakeLists.txt) -- the custom end-to-end replay
+# harness has no heavy fetched deps and always builds.
+option(RIPTIDE_BUILD_BENCH "Build the Google Benchmark microbenchmarks" OFF)
 option(RIPTIDE_BUILD_TOOLS "Build the LOBSTER validation tool" ON)
 
 include(cmake/CompilerWarnings.cmake)
 
 add_subdirectory(src)
 add_subdirectory(tools/lobster)  # shared by tools/validate and bench/
+add_subdirectory(bench)
 
 if(RIPTIDE_BUILD_TESTS)
   enable_testing()
   add_subdirectory(tests)
-endif()
-
-if(RIPTIDE_BUILD_BENCH)
-  add_subdirectory(bench)
 endif()
 
 if(RIPTIDE_BUILD_TOOLS)

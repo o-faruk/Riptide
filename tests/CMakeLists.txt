@@ -16,11 +16,13 @@ add_executable(riptide_tests
   order_book_test.cpp
   matching_engine_test.cpp
   edge_cases_test.cpp
+  stats_test.cpp
 )
 
 target_link_libraries(riptide_tests
   PRIVATE
     riptide_core
+    riptide_bench_stats
     riptide_warnings
     GTest::gtest_main
 )
