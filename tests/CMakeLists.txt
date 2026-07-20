@@ -15,6 +15,7 @@ add_executable(riptide_tests
   event_test.cpp
   order_book_test.cpp
   matching_engine_test.cpp
+  edge_cases_test.cpp
 )
 
 target_link_libraries(riptide_tests
