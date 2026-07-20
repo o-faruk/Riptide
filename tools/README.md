@@ -1,6 +1,9 @@
 # tools/
 
-Placeholder. Phase 2 adds `fetch_data.sh` (downloads and verifies LOBSTER
-sample data into `data/`) and `validate/` (the streaming line-by-line
-comparator that checks the engine's book state against LOBSTER's
-reconstructed reference book).
+- `fetch_data.sh` — downloads LOBSTER sample data into `data/` (gitignored,
+  never committed — see the script for why) and verifies message/orderbook
+  row counts match.
+- `validate/` — streams a message/orderbook file pair in lockstep, replays
+  the messages through a `MatchingEngine`, and compares the resulting book
+  against LOBSTER's reference after every row. See `docs/DESIGN.md` for the
+  adapter design and the validation gate's methodology.

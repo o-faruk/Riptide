@@ -1,0 +1,54 @@
+name: LOBSTER validation
+
+# Manually triggered only, not run on every push/PR. tools/fetch_data.sh
+# pulls from php.lobsterdata.com at run time (data is gitignored, never
+# committed — see fetch_data.sh for why); an automatic job re-fetching on
+# every push would edge toward the "systematic downloading" the site's
+# terms of use prohibit, even though nothing here is ever persisted.
+# Manual, occasional runs stay clearly on the right side of that line.
+on:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: validate (regression guard)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake --preset debug
+
+      - name: Build validator
+        run: cmake --build --preset debug --target riptide_validate
+
+      - name: Fetch LOBSTER sample data
+        run: tools/fetch_data.sh AAPL AMZN MSFT
+
+      # Free LOBSTER sample data starts mid-day with resting liquidity the
+      # message file gives no type-1 rows for (see docs/DESIGN.md) —
+      # full-file validation is provably unachievable from this data, so
+      # the gate is "no worse than the documented baseline" per ticker,
+      # not "the whole file validates." A REGRESSION result here (exit 1)
+      # means something in the matching engine or adapter changed to
+      # diverge *earlier* than the documented, understood baseline.
+      - name: Validate AAPL
+        run: >
+          ./build/debug/tools/validate/riptide_validate
+          data/AAPL/AAPL_2012-06-21_34200000_57600000_message_10.csv
+          data/AAPL/AAPL_2012-06-21_34200000_57600000_orderbook_10.csv
+          --min-rows 11
+
+      - name: Validate AMZN
+        run: >
+          ./build/debug/tools/validate/riptide_validate
+          data/AMZN/AMZN_2012-06-21_34200000_57600000_message_10.csv
+          data/AMZN/AMZN_2012-06-21_34200000_57600000_orderbook_10.csv
+          --min-rows 35
+
+      - name: Validate MSFT
+        run: >
+          ./build/debug/tools/validate/riptide_validate
+          data/MSFT/MSFT_2012-06-21_34200000_57600000_message_10.csv
+          data/MSFT/MSFT_2012-06-21_34200000_57600000_orderbook_10.csv
+          --min-rows 6

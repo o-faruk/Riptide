@@ -15,6 +15,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(RIPTIDE_BUILD_TESTS "Build the GoogleTest suite" ON)
 option(RIPTIDE_BUILD_BENCH "Build the Google Benchmark harness" OFF)
+option(RIPTIDE_BUILD_TOOLS "Build the LOBSTER validation tool" ON)
 
 include(cmake/CompilerWarnings.cmake)
 
@@ -27,4 +28,8 @@ endif()
 
 if(RIPTIDE_BUILD_BENCH)
   add_subdirectory(bench)
+endif()
+
+if(RIPTIDE_BUILD_TOOLS)
+  add_subdirectory(tools/validate)
 endif()
