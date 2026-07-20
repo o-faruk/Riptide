@@ -43,6 +43,11 @@ Order* OrderBook::find(OrderId id) {
   return found == index_.end() ? nullptr : &*found->second.it;
 }
 
+const Order* OrderBook::find(OrderId id) const {
+  auto found = index_.find(id);
+  return found == index_.end() ? nullptr : &*found->second.it;
+}
+
 std::optional<Price> OrderBook::best_price(Side side) const {
   if (side == Side::Buy) {
     return bids_.empty() ? std::nullopt : std::optional{bids_.begin()->first};

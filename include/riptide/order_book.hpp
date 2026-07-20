@@ -49,6 +49,7 @@ class OrderBook {
   // Mutable so the engine can adjust remaining quantity in place (used by
   // set_remaining_in_place and by the matching loop). nullptr if not live.
   Order* find(OrderId id);
+  const Order* find(OrderId id) const;
 
   std::optional<Price> best_price(Side side) const;
 

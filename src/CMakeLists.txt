@@ -1,7 +1,7 @@
-# Phase 1 will add matching_engine.cpp, etc. to this list.
 add_library(riptide_core
   version.cpp
   order_book.cpp
+  matching_engine.cpp
 )
 
 target_include_directories(riptide_core

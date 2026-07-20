@@ -10,11 +10,11 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
-# Phase 1 will add matching_engine_test.cpp, etc.
 add_executable(riptide_tests
   test_version.cpp
   event_test.cpp
   order_book_test.cpp
+  matching_engine_test.cpp
 )
 
 target_link_libraries(riptide_tests
