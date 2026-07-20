@@ -1,0 +1,24 @@
+---
+Checks: >
+  -*,
+  bugprone-*,
+  cert-*,
+  clang-analyzer-*,
+  cppcoreguidelines-*,
+  modernize-*,
+  performance-*,
+  portability-*,
+  readability-*,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -readability-magic-numbers,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  -modernize-use-trailing-return-type,
+  -readability-identifier-length
+# Magic-number and identifier-length checks are disabled: this codebase is
+# tick/price arithmetic-heavy and idioms like `qty`, `id`, `px` are standard
+# in this domain, not readability problems. Pointer-arithmetic is disabled
+# because Phase 4's intrusive-list and slab-allocator work needs it
+# deliberately, not accidentally.
+WarningsAsErrors: ''
+HeaderFilterRegex: '^(include|src)/'
+FormatStyle: file

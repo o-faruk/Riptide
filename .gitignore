@@ -1,0 +1,33 @@
+# Build artifacts
+build/
+build-*/
+cmake-build-*/
+out/
+
+# Market data (LOBSTER samples etc.) — never commit real data files.
+# See tools/fetch_data.sh (Phase 2) for how to (re)populate this directory.
+data/*
+!data/.gitkeep
+
+# Compiler / tooling outputs
+compile_commands.json
+*.o
+*.obj
+*.exe
+*.out
+*.dSYM/
+_deps/
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+
+# Editor / IDE (personal settings, not project config)
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
