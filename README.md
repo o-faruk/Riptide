@@ -34,13 +34,27 @@ Phase 3 built the measurement apparatus ahead of any optimization work:
 percentiles, histogram, throughput, with disclosed and subtracted timer
 overhead) and `bench/micro_benchmarks.cpp` (Google Benchmark, isolating
 crossing cost via a controlled synthetic sweep, since real LOBSTER data
-essentially never exercises that path directly). **No baseline numbers
-are reported here yet** — this project's code is developed on an Apple M3
-Pro / macOS machine, architecturally unrelated to the project's actual
-target (an Acer Nitro 5 running Ubuntu), so nothing measured during
-development is a valid project benchmark result. See
-`bench/ENVIRONMENT.md` for the full methodology and what's still needed
-before a real baseline lands.
+essentially never exercises that path directly).
+
+The project's original target machine (an Acer Nitro 5 laptop) broke
+mid-project and is no longer available; the target is now a desktop (AMD
+Ryzen 5 7600X) accessed via WSL2 on Windows — a real, disclosed change in
+what "the target machine" means for this project, detailed in
+`bench/ENVIRONMENT.md`. First real baseline, AAPL, `release` build,
+median across 10 independent runs:
+
+| Category | p50 | p99 | p99.9 | max |
+|---|---|---|---|---|
+| all messages | 70ns | 261ns | 561ns | 43.6µs |
+| new | 81ns | 321ns | 662ns | 39.4µs |
+| cancel | 60ns | 151ns | 261ns | 38.6µs |
+| modify | 41ns | 170ns | 251ns | 391ns |
+
+Steady-state throughput: **~3.68M msg/s** (median). Full percentile
+table, IQRs, methodology, and known limitations (WSL2 exposes no CPU
+frequency governor at all, unlike bare-metal Linux) in
+`bench/ENVIRONMENT.md`. AMZN/MSFT baselines and the crossing-cost
+micro-benchmarks are the natural next runs.
 
 ## Build
 
@@ -59,7 +73,7 @@ Other presets: `relwithdebinfo`, `release`, `asan`, `ubsan`, `tsan`.
 0. Scaffolding — done
 1. Matching engine — correctness only, no optimization — done
 2. LOBSTER validation gate — the correctness bar the project must clear — done
-3. Honest benchmark methodology *(current — harness built; real baseline pending on target hardware)*
+3. Honest benchmark methodology *(current — harness built; AAPL baseline captured, AMZN/MSFT + crossing micro-benchmarks pending)*
 4. Latency engineering — profiled, incremental, logged
 5. Event-driven backtester
 6. Documentation and presentation

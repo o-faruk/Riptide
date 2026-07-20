@@ -1,0 +1,52 @@
+Command: ./bench/run_replay_benchmark.sh ./build/release/bench/riptide_bench_replay \
+    data/AAPL/AAPL_2012-06-21_34200000_57600000_message_10.csv 10
+Date: 2026-07-20
+Machine: see environment_20260720.txt (AMD Ryzen 5 7600X, WSL2 Ubuntu 26.04)
+Build: release preset (-O3 -DNDEBUG, no -march=native, no LTO)
+
+=== Percentiles: median [Q1, Q3] across 10 runs ===
+
+-- all --
+  count    median=315088     [315088, 315088]
+  p50      median=70         [70, 70]
+  p90      median=130        [120, 130]
+  p99      median=261        [251, 270]
+  p999     median=561        [531, 571]
+  p9999    median=9157       [5661, 9608]
+  max      median=43593      [38013, 52900]
+
+-- new --
+  count    median=164773     [164773, 164773]
+  p50      median=81         [80, 81]
+  p90      median=150        [141, 150]
+  p99      median=321        [311, 330]
+  p999     median=662        [642, 691]
+  p9999    median=9709       [6953, 10941]
+  max      median=39350      [28845, 45296]
+
+-- cancel --
+  count    median=147485     [147485, 147485]
+  p50      median=60         [60, 60]
+  p90      median=91         [90, 91]
+  p99      median=151        [141, 151]
+  p999     median=261        [260, 271]
+  p9999    median=1323       [992, 1343]
+  max      median=38614      [35384, 51588]
+
+-- modify --
+  count    median=2830       [2830, 2830]
+  p50      median=41         [40, 41]
+  p90      median=90         [90, 91]
+  p99      median=170        [170, 171]
+  p999     median=251        [240, 270]
+  p9999    median=391        [291, 631]
+  max      median=391        [291, 631]
+
+=== Throughput: median [Q1, Q3] across 10 runs (msg/s) ===
+  median=3675918 [3610728, 3703745]
+
+All latencies in nanoseconds, timer overhead already subtracted (see
+bench/replay_harness.cpp / bench/ENVIRONMENT.md for methodology). These
+are New/Cancel/Modify latencies only, measured directly through
+MatchingEngine -- not through the LOBSTER-correctness adapter, and not
+including crossing cost (see bench/micro_benchmarks.cpp for that).

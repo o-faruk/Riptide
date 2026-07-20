@@ -21,8 +21,10 @@ struct Message {
 };
 
 // Streams a LOBSTER message CSV file line by line. Files are hundreds of
-// MB for a single trading day, so this never loads more than one line at
-// a time — required by the project's 8GB-RAM constraint.
+// MB for a single trading day, and real market-data volumes (more
+// symbols, more days) scale well past whatever RAM happens to be
+// available on the machine running this — so this never loads more than
+// one line at a time regardless of the current dev/bench machine's specs.
 class MessageReader {
  public:
   explicit MessageReader(const std::string& path);

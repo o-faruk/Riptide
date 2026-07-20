@@ -6,21 +6,25 @@ in this repository.
 
 ## This session's coding machine is not the measurement machine
 
-This project's code was developed in a session running on **Apple M3 Pro
-/ macOS** (`arm64`). The project's actual target machine — the one every
-"official" benchmark number in this repo must come from — is the laptop
-described in the project brief: **Acer Nitro 5, Ubuntu Server 24.04 LTS,
-8 GB RAM**, a consumer x86_64 laptop CPU with frequency scaling and no
-isolated cores.
+This project's code is developed in a session running on **Apple M3 Pro /
+macOS** (`arm64`). The project's original target machine was an Acer
+Nitro 5 laptop (Ubuntu Server 24.04, 8 GB RAM) — that laptop has since
+broken and is no longer available. **The current target machine is a
+desktop**: AMD Ryzen 5 7600X (6 cores / 12 threads, 32 MB L3), accessed
+via WSL2 (Ubuntu 26.04) on Windows, ~15 GB RAM visible inside WSL2. Full
+detail in `bench/results/environment_20260720.txt`.
 
-These are architecturally different machines (ARM vs. x86_64, a fanless-
-tuned Apple SoC vs. a budget gaming laptop CPU under a thin-and-light
-chassis). Any timing captured on the macOS dev machine has **no bearing**
-on the project's real performance claims and must never be reported as
-if it were a project benchmark result — that would be exactly the kind
-of fabricated-looking number the project's own rules prohibit. Numbers
-produced on the dev machine during development are labeled "smoke test"
-in commit messages and this document, never "baseline" or "result."
+This is a real change in what "the target machine" means for the
+project, not a cosmetic one: a desktop CPU has thermal headroom a laptop
+chassis doesn't, but WSL2 sits between the benchmark and the bare metal
+(see Known Limitations below) in a way plain Ubuntu-on-a-laptop wouldn't
+have. Both are disclosed, not glossed over.
+
+Regardless of which machine is "the" target at any point, the macOS dev
+machine's numbers are never valid substitutes for it — different
+architecture entirely (ARM vs. x86_64). Numbers produced on the dev
+machine during development are labeled "smoke test" in commit messages
+and this document, never "baseline" or "result."
 
 ## Reproducing on the real target machine
 
@@ -37,7 +41,9 @@ cmake --build --preset release
 `data/` needs the LOBSTER sample fetched first: `tools/fetch_data.sh AAPL`
 (see that script and `docs/DESIGN.md` for why it isn't committed).
 
-Optional, for the most controlled run (needs root, Linux only):
+Optional, for the most controlled run (needs root, Linux only — and see
+Known Limitations below for why this does less under WSL2 than on bare
+metal):
 
 ```sh
 sudo bench/pin_and_run.sh 0 -- ./build/release/bench/riptide_bench_replay data/AAPL/...
@@ -114,26 +120,61 @@ engine if reported.
 
 ## Known limitations of the target machine (disclose, don't hide)
 
-- **No isolated cores.** `bench/pin_and_run.sh` pins to a single core via
-  `taskset`, but the OS scheduler still shares every other core with
-  normal system load; this isn't a tuned trading box with `isolcpus`.
-- **Frequency scaling.** `pin_and_run.sh` sets the `performance` governor
-  for the pinned core when it can (needs root), but consumer laptop
-  firmware still makes independent thermal/power decisions the governor
-  setting doesn't fully override.
-- **Thermal throttling under sustained load.** A laptop chassis will
-  throttle under repeated benchmark runs in a way a desktop or server
-  wouldn't. This is exactly what the 10-run median/IQR discipline is for
-  — report the spread, don't pretend it isn't there.
-- **8 GB RAM.** Not usually a benchmark-accuracy concern for a single
-  day's LOBSTER replay, but relevant context for why this project
-  streams data rather than loading full days into memory anywhere.
+- **WSL2 virtualization sits between the benchmark and the bare metal.**
+  This is a real hypervisor layer (Hyper-V), not a lightweight
+  namespace/chroot — confirmed by `collect_environment.sh` itself:
+  `Hypervisor vendor: Microsoft`, `Virtualization type: full`. Whatever
+  Windows' own scheduler is doing with the host's 12 logical CPUs at any
+  given moment can affect what WSL2's guest kernel sees, in a way bare-
+  metal Linux wouldn't have.
+- **No CPU frequency governor exposed at all.** Confirmed directly:
+  `collect_environment.sh` reports "No cpufreq scaling_governor files
+  found." `bench/pin_and_run.sh` degrades gracefully (warns and proceeds
+  without setting a governor) rather than failing, but this means there
+  is currently no way to force a `performance` governor for a run on this
+  machine — a strictly weaker guarantee than the bare-metal-Linux case
+  the script was originally written for.
+- **`taskset` pinning still works** (WSL2's kernel is real Linux), but
+  pinning to a WSL2-visible core number doesn't guarantee the same
+  physical host core stays assigned to it for the run's duration — that's
+  ultimately Hyper-V's call, not ours.
+- **Thermal throttling is less of a concern than the original laptop
+  framing** — this is a desktop CPU, not a battery-powered chassis — but
+  hasn't been independently confirmed (`lm-sensors` isn't installed; see
+  `collect_environment.sh` output). The 10-run median/IQR discipline
+  covers this regardless of cause: report the spread, don't assume it
+  away.
+- **~15 GB RAM visible to WSL2.** Comfortably more than the original 8 GB
+  figure this project was scoped around. Doesn't change the streaming
+  design (still correct practice for realistic multi-symbol/multi-day
+  data volumes), just means memory pressure isn't a live concern on this
+  particular machine for a single day's LOBSTER replay.
 
 ## Results
 
-No baseline has been captured on the target machine yet. Once
-`bench/run_replay_benchmark.sh` and `bench/collect_environment.sh` have
-been run on the actual Ubuntu laptop, their output belongs here (or in
-`bench/results/`, referenced from this section) — committed as the
-literal, unedited tool output, not retyped or summarized, so the number
-in the README always traces back to a command that was actually run.
+`bench/results/environment_20260720.txt` and
+`bench/results/replay_baseline_20260720_AAPL.txt` are the literal,
+unedited output of the commands in "Reproducing on the real target
+machine" above, run 2026-07-20 on the machine described at the top of
+this document. AAPL, 2012-06-21, level-10 sample, `release` build,
+10 independent runs, median [Q1, Q3]:
+
+| Category | p50 | p90 | p99 | p99.9 | p99.99 | max | n |
+|---|---|---|---|---|---|---|---|
+| all | 70ns | 130ns | 261ns | 561ns | 9157ns | 43593ns | 315088 |
+| new | 81ns | 150ns | 321ns | 662ns | 9709ns | 39350ns | 164773 |
+| cancel | 60ns | 91ns | 151ns | 261ns | 1323ns | 38614ns | 147485 |
+| modify | 41ns | 90ns | 170ns | 251ns | 391ns | 391ns | 2830 |
+
+Steady-state throughput: **3,675,918 msg/s** (median across 10 runs;
+[3,610,728, 3,703,745] IQR).
+
+These are New/Cancel/Modify latencies measured directly through
+`MatchingEngine`, deliberately not through the LOBSTER-correctness
+adapter (see `bench/replay_harness.cpp`'s header) and not including
+crossing cost — see `bench/micro_benchmarks.cpp` for that, still pending
+a `-DRIPTIDE_BUILD_BENCH=ON` run on this machine.
+
+Only AAPL has been run as of this writing; AMZN and MSFT (the other two
+tickers Phase 2 validated) are natural next runs for a fuller baseline,
+same commands with a different ticker's file.
