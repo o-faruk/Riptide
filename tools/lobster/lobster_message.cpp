@@ -1,4 +1,4 @@
-#include "lobster_message.hpp"
+#include "lobster/lobster_message.hpp"
 
 #include <charconv>
 #include <stdexcept>

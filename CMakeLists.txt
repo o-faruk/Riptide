@@ -20,6 +20,7 @@ option(RIPTIDE_BUILD_TOOLS "Build the LOBSTER validation tool" ON)
 include(cmake/CompilerWarnings.cmake)
 
 add_subdirectory(src)
+add_subdirectory(tools/lobster)  # shared by tools/validate and bench/
 
 if(RIPTIDE_BUILD_TESTS)
   enable_testing()

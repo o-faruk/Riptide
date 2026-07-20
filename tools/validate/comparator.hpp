@@ -2,7 +2,7 @@
 
 #include <ostream>
 
-#include "lobster_book.hpp"
+#include "lobster/lobster_book.hpp"
 #include "riptide/order_book.hpp"
 
 namespace riptide::lobster {

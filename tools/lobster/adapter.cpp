@@ -1,4 +1,4 @@
-#include "adapter.hpp"
+#include "lobster/adapter.hpp"
 
 #include <variant>
 

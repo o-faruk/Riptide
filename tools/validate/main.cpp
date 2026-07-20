@@ -5,10 +5,10 @@
 #include <string>
 #include <string_view>
 
-#include "adapter.hpp"
 #include "comparator.hpp"
-#include "lobster_book.hpp"
-#include "lobster_message.hpp"
+#include "lobster/adapter.hpp"
+#include "lobster/lobster_book.hpp"
+#include "lobster/lobster_message.hpp"
 #include "riptide/matching_engine.hpp"
 
 namespace {

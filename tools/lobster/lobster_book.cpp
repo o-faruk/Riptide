@@ -1,4 +1,4 @@
-#include "lobster_book.hpp"
+#include "lobster/lobster_book.hpp"
 
 #include <charconv>
 #include <stdexcept>

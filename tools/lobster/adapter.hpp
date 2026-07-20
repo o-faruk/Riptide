@@ -7,8 +7,8 @@
 #include <string>
 #include <utility>
 
-#include "lobster_book.hpp"
-#include "lobster_message.hpp"
+#include "lobster/lobster_book.hpp"
+#include "lobster/lobster_message.hpp"
 #include "riptide/matching_engine.hpp"
 
 namespace riptide::lobster {
