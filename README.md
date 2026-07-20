@@ -3,9 +3,9 @@
 A low-latency limit-order-book matching engine and event-driven backtester,
 built in modern C++.
 
-**Status: Phase 2 (LOBSTER validation) in progress.** This README is a stub
-and will be rewritten properly in Phase 6 — see `docs/DESIGN.md` for the
-real detail in the meantime.
+**Status: Phase 3 (benchmark methodology) in progress.** This README is a
+stub and will be rewritten properly in Phase 6 — see `docs/DESIGN.md` and
+`bench/ENVIRONMENT.md` for the real detail in the meantime.
 
 ## Correctness, so far
 
@@ -27,6 +27,21 @@ the matching engine itself. `docs/DESIGN.md` documents the exact
 mechanism, with concrete evidence, and the resulting (honest, small)
 validated-row-count baselines per ticker.
 
+## Benchmarking, so far
+
+Phase 3 built the measurement apparatus ahead of any optimization work:
+`bench/replay_harness.cpp` (real-data New/Cancel/Modify latency
+percentiles, histogram, throughput, with disclosed and subtracted timer
+overhead) and `bench/micro_benchmarks.cpp` (Google Benchmark, isolating
+crossing cost via a controlled synthetic sweep, since real LOBSTER data
+essentially never exercises that path directly). **No baseline numbers
+are reported here yet** — this project's code is developed on an Apple M3
+Pro / macOS machine, architecturally unrelated to the project's actual
+target (an Acer Nitro 5 running Ubuntu), so nothing measured during
+development is a valid project benchmark result. See
+`bench/ENVIRONMENT.md` for the full methodology and what's still needed
+before a real baseline lands.
+
 ## Build
 
 Requires CMake 3.21+ and GCC 13+ or Clang 17+ (C++20).
@@ -43,8 +58,8 @@ Other presets: `relwithdebinfo`, `release`, `asan`, `ubsan`, `tsan`.
 
 0. Scaffolding — done
 1. Matching engine — correctness only, no optimization — done
-2. LOBSTER validation gate — the correctness bar the project must clear *(current)*
-3. Honest benchmark methodology
+2. LOBSTER validation gate — the correctness bar the project must clear — done
+3. Honest benchmark methodology *(current — harness built; real baseline pending on target hardware)*
 4. Latency engineering — profiled, incremental, logged
 5. Event-driven backtester
 6. Documentation and presentation
