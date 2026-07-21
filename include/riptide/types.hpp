@@ -1,8 +1,16 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 
 namespace riptide {
+
+// Identifies one instrument in a (possibly multi-instrument) backtest --
+// see backtest/multi_instrument_backtester.hpp. A ticker string rather
+// than an interned integer: at backtest scale (a handful to a few dozen
+// instruments, not a hot matching-engine path) legibility in logs/CLI
+// output matters more than the lookup cost of a string key.
+using InstrumentId = std::string;
 
 // Prices are scaled integers ("ticks"), never floating point — floating
 // point comparison/rounding has no place in a matching engine's crossing

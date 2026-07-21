@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "lobster/adapter.hpp"
@@ -10,11 +11,12 @@
 #include "lobster/lobster_message.hpp"
 #include "riptide/order_port.hpp"
 #include "riptide/portfolio.hpp"
+#include "riptide/risk_limits.hpp"
 #include "riptide/strategy.hpp"
 
 namespace riptide {
 
-// Drives a Strategy through a real LOBSTER file. `lobster::Adapter<Engine>`
+// Drives a Strategy through one real LOBSTER file. `lobster::Adapter<Engine>`
 // (Phase 2) supplies every OTHER market participant's order flow into a
 // live engine; the strategy trades in that exact same engine through an
 // OrderPort. See docs/DESIGN.md's Phase 5 section for why fills are real
@@ -24,6 +26,11 @@ namespace riptide {
 // 5 doesn't re-run Phase 2's validation gate, it uses LOBSTER as a
 // source of realistic other-participant flow, not a target the strategy
 // must reproduce.
+//
+// Single-instrument: `instrument` is a fixed label passed through to
+// every Strategy/OrderPort/Portfolio call (they're all instrument-aware
+// so the same types serve MultiInstrumentBacktester too — see
+// backtest/multi_instrument_backtester.hpp for the multi-file case).
 template <typename Engine>
 class Backtester {
  public:
@@ -35,15 +42,21 @@ class Backtester {
     std::optional<std::string> stopped_early_reason;
   };
 
-  explicit Backtester(Strategy& strategy)
-      : adapter_(engine_),
+  Backtester(InstrumentId instrument, Strategy& strategy, RiskLimits limits = RiskLimits{})
+      : instrument_(std::move(instrument)),
+        adapter_(engine_),
         strategy_(strategy),
-        port_([this](NewOrderRequest request) { return engine_.new_order(std::move(request)); },
-              [this](OrderId id) { return engine_.cancel(id); },
-              [this](ModifyRequest request) { return engine_.modify(std::move(request)); },
-              [this]() { return adapter_.ReserveOrderId(); },
-              [this](Side side) { return engine_.book().best_price(side); }, portfolio_,
-              strategy_) {}
+        port_(
+            [this](const InstrumentId&, NewOrderRequest request) {
+              return engine_.new_order(std::move(request));
+            },
+            [this](const InstrumentId&, OrderId id) { return engine_.cancel(id); },
+            [this](const InstrumentId&, ModifyRequest request) {
+              return engine_.modify(std::move(request));
+            },
+            [this](const InstrumentId&) { return adapter_.ReserveOrderId(); },
+            [this](const InstrumentId&, Side side) { return engine_.book().best_price(side); },
+            portfolio_, strategy_, limits) {}
 
   Result Run(const char* message_path, const char* orderbook_path) {
     lobster::MessageReader messages(message_path);
@@ -73,8 +86,9 @@ class Backtester {
       // OrderPort's own Notify): a market participant's order can trade
       // against the strategy's resting order, and that Trade is produced
       // right here, not through a strategy submission.
-      for (const Event& event : events) portfolio_.ApplyEvent(event);
-      strategy_.OnMarketEvent(events, port_);
+      for (const Event& event : events) portfolio_.ApplyEvent(instrument_, event);
+      strategy_.OnMarketEvent(instrument_, events, port_);
+      RecordMarkToMarket();
       ++result.rows_replayed;
     }
     return result;
@@ -82,8 +96,19 @@ class Backtester {
 
   const Engine& engine() const { return engine_; }
   const Portfolio& portfolio() const { return portfolio_; }
+  const InstrumentId& instrument() const { return instrument_; }
 
  private:
+  void RecordMarkToMarket() {
+    const auto best_bid = engine_.book().best_price(Side::Buy);
+    const auto best_ask = engine_.book().best_price(Side::Sell);
+    if (!best_bid.has_value() || !best_ask.has_value()) return;  // one side empty -- no mid to mark at
+
+    const Price mid = (*best_bid + *best_ask) / 2;
+    portfolio_.RecordMarkToMarket(portfolio_.mark_to_market(instrument_, mid));
+  }
+
+  InstrumentId instrument_;
   Engine engine_;
   lobster::Adapter<Engine> adapter_;
   Strategy& strategy_;

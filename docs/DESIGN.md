@@ -281,38 +281,101 @@ interface for real.
 
 ### Portfolio and P&L
 
-A `Portfolio` tracks the strategy's own cash and position only, updated
-off `Trade` events where the strategy owns `resting_id` or
-`aggressor_id`. Mark-to-market P&L (`cash + position * mid_price`) can
-be computed at any point from the live book; realized P&L is the same
-formula at the run's end. Kept deliberately simple for the first slice
-— see deferred list below for what's cut.
+A `Portfolio` tracks the strategy's own cash (one shared account) and
+position (per instrument — see multi-instrument below), updated off
+`Trade` events where the strategy owns `resting_id` or `aggressor_id`.
+Mark-to-market P&L (`cash + sum of position*mark_price` across held
+instruments) can be computed at any point from the live book(s);
+realized P&L is the same formula at the run's end.
+
+**Max drawdown and per-sample "Sharpe"**: `Portfolio::RecordMarkToMarket`
+takes one running total-portfolio mark-to-market value per replayed row
+(computed by the backtester driver, which has book access) and folds it
+into O(1) streaming stats — a running peak for drawdown, Welford's
+algorithm for the mean/variance of period-to-period deltas — rather
+than storing the full history, since a real replay can be hundreds of
+thousands of rows. `max_drawdown()` is a real, honest number: worst
+peak-to-current decline actually seen. `sharpe_ratio_per_sample()` is
+deliberately NOT called a Sharpe ratio in its name or its doc comment:
+a real Sharpe ratio needs independent, periodic (e.g. daily) returns
+and annualization; the deltas here are between whatever rows the
+backtester recorded (every replayed LOBSTER row within one session),
+which are neither independent nor a fixed period. Reporting it as an
+annualized Sharpe ratio would be exactly the kind of fabricated number
+this project's rules don't allow — so it's named for what it actually
+is (a directional mean/stddev ratio, useful for comparing two runs
+against the same replay) and nothing more.
+
+**Risk limits**: `RiskLimits` (`include/riptide/risk_limits.hpp`) is an
+optional, per-instrument pre-trade control `OrderPort` enforces on the
+strategy's own submissions — `max_order_quantity` (a single order's own
+size) and `max_abs_position` (checked against the position the order
+would leave assuming it fills completely, not whether it actually
+does). A breach means the order never reaches the engine at all: no
+Accepted, no Portfolio update, no `Strategy::OnOwnEvent` call — as if
+it was never submitted. This sits on top of, not instead of,
+`MatchingEngine`'s own request validation (which nothing can bypass
+either way) — it represents a strategy's own risk desk, not an
+exchange rule.
+
+**Multi-instrument**: order IDs are only unique WITHIN one instrument
+(each has its own engine/book), so `Portfolio`, `Strategy`, and
+`OrderPort` are all keyed/parameterized by `InstrumentId` (a ticker
+string) throughout — `Portfolio::position(instrument)`,
+`OrderPort::Buy(instrument, ...)`, `Strategy::OnMarketEvent(instrument,
+...)`. `MultiInstrumentBacktester<Engine>` (a new class alongside the
+single-instrument `Backtester<Engine>`, sharing the same
+Strategy/OrderPort/Portfolio types since they're already
+instrument-aware) drives several LOBSTER file pairs at once, replaying
+rows in TRUE chronological order across instruments — the earliest
+pending timestamp across all open files goes next, not one file
+replayed to completion before the next starts. Each instrument keeps
+its own `Engine` and `lobster::Adapter<Engine>` (a `std::vector` of
+`unique_ptr<InstrumentState<Engine>>`, not a hash map, specifically so
+`Adapter`'s `Engine&` reference member is never at risk from a
+container rehash/move — each instrument's state is constructed once,
+in place, and never relocated). Verified against two real files at
+once (AAPL + AMZN): both tickers' documented Phase 2 baselines still
+hold when replayed together, and both tickers are provably interleaved
+(each appears at least once before the other is exhausted), not
+replayed sequentially.
 
 ### First slice vs. deferred
 
-First slice: single instrument, one `Strategy` at a time, LOBSTER file
-as the market-flow source via `Adapter<Engine>`, cash+position P&L,
-plain end-of-run summary (fills, realized P&L, mark-to-market P&L,
-max position). Test plan mirrors Phase 1's philosophy: unit tests for
-`Portfolio` arithmetic against hand-computed fills, plus a regression
-check that a strategy which never trades reproduces exactly the same
-book trajectory Phase 2 already validates (confirms the backtester's
-reuse of `Adapter<Engine>` doesn't itself change engine behavior).
+First slice (now including all of the above): one or several
+instruments, one `Strategy` at a time, LOBSTER files as the
+market-flow source via `Adapter<Engine>`, cash+per-instrument-position
+P&L with drawdown/per-sample-Sharpe, optional risk limits, plain
+end-of-run summary. Test plan mirrors Phase 1's philosophy: unit tests
+for `Portfolio` arithmetic against hand-computed fills (including
+cross-instrument attribution and the drawdown/Sharpe stats), plus a
+regression check that a strategy which never trades reproduces exactly
+the same book trajectory Phase 2 already validates (confirms the
+backtester's reuse of `Adapter<Engine>` doesn't itself change engine
+behavior).
 
 `tools/backtest` is the CLI tool analogous to `tools/validate`: it runs
 one example strategy (`RestAtBestBidStrategy` — rests a single GTC buy
 at the current best bid the first time it observes the market, then
 does nothing else; honestly documented as a machinery demo, not a real
-trading strategy) against a real LOBSTER file and prints fills/P&L. Run
-against real AAPL/AMZN data, it reproduces exactly what the design
-predicts: a handful of real fills with sane, sanity-checkable P&L
-(e.g. buying 100 AAPL shares near the touch and marking a few rows
-later at +$2), then the adapter reports the *expected* divergence from
-LOBSTER's own orderbook file once the strategy's resting order has
-actually changed the book's history — the honest tradeoff of picking
-"real participation" over tape-approximated fills (see above).
+trading strategy) against a real LOBSTER file and prints fills/P&L/
+drawdown/Sharpe, with `--max-position`/`--max-order-quantity` flags for
+RiskLimits. Run against real AAPL/AMZN/MSFT data, it reproduces exactly
+what the design predicts: a handful of real fills with sane,
+sanity-checkable P&L (e.g. buying 100 AAPL shares near the touch and
+marking a few rows later at +$2), then the adapter reports the
+*expected* divergence from LOBSTER's own orderbook file once the
+strategy's resting order has actually changed the book's history — the
+honest tradeoff of picking "real participation" over tape-approximated
+fills (see above). `tools/backtest`'s CLI itself stays single-instrument
+for now — `MultiInstrumentBacktester` is real, tested against real
+data, and used directly in `tests/backtester_test.cpp`, but wiring a
+multi-file CLI mode is left as a small, well-scoped follow-up rather
+than done speculatively here.
 
-Deferred (not built yet, in rough expected-value order): multiple
-instruments, queue-position-aware resting-order fill realism, risk/
-position limits, richer performance stats (Sharpe, max drawdown),
-config-driven strategy parameters/selection in the CLI.
+Deferred (not built yet, in rough expected-value order):
+queue-position-aware resting-order fill realism (a resting order's
+place in the FIFO queue relative to pre-existing/synthetic bucket
+orders isn't modeled beyond what `Adapter` already does for Phase 2),
+config-driven strategy parameters/selection in the CLI, a
+multi-instrument CLI mode.
