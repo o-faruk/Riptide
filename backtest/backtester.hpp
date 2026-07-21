@@ -38,11 +38,12 @@ class Backtester {
   explicit Backtester(Strategy& strategy)
       : adapter_(engine_),
         strategy_(strategy),
-        port_(
-            [this](NewOrderRequest request) { return engine_.new_order(std::move(request)); },
-            [this](OrderId id) { return engine_.cancel(id); },
-            [this](ModifyRequest request) { return engine_.modify(std::move(request)); },
-            [this]() { return adapter_.ReserveOrderId(); }, portfolio_, strategy_) {}
+        port_([this](NewOrderRequest request) { return engine_.new_order(std::move(request)); },
+              [this](OrderId id) { return engine_.cancel(id); },
+              [this](ModifyRequest request) { return engine_.modify(std::move(request)); },
+              [this]() { return adapter_.ReserveOrderId(); },
+              [this](Side side) { return engine_.book().best_price(side); }, portfolio_,
+              strategy_) {}
 
   Result Run(const char* message_path, const char* orderbook_path) {
     lobster::MessageReader messages(message_path);

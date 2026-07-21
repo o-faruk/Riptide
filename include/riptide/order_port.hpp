@@ -31,13 +31,23 @@ class OrderPort {
   OrderPort(std::function<std::vector<Event>(NewOrderRequest)> new_order,
             std::function<std::vector<Event>(OrderId)> cancel,
             std::function<std::vector<Event>(ModifyRequest)> modify,
-            std::function<OrderId()> reserve_id, Portfolio& portfolio, Strategy& strategy)
+            std::function<OrderId()> reserve_id,
+            std::function<std::optional<Price>(Side)> best_price, Portfolio& portfolio,
+            Strategy& strategy)
       : new_order_(std::move(new_order)),
         cancel_(std::move(cancel)),
         modify_(std::move(modify)),
         reserve_id_(std::move(reserve_id)),
+        best_price_(std::move(best_price)),
         portfolio_(portfolio),
         strategy_(strategy) {}
+
+  // Read-only market data: the current best price on `side`, or nullopt
+  // if that side of the book is empty. Without this a Strategy can only
+  // ever submit orders blind (e.g. one unconditional market order) —
+  // any price-aware decision (quoting around the touch, only trading
+  // when the spread is tight, etc.) needs it.
+  std::optional<Price> BestPrice(Side side) const { return best_price_(side); }
 
   std::vector<Event> Buy(OrderType type, TimeInForce tif, std::optional<Price> price,
                           Quantity quantity) {
@@ -83,6 +93,7 @@ class OrderPort {
   std::function<std::vector<Event>(OrderId)> cancel_;
   std::function<std::vector<Event>(ModifyRequest)> modify_;
   std::function<OrderId()> reserve_id_;
+  std::function<std::optional<Price>(Side)> best_price_;
   Portfolio& portfolio_;
   Strategy& strategy_;
 };

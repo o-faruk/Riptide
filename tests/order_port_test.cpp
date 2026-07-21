@@ -40,7 +40,8 @@ struct Fixture {
         [this](NewOrderRequest request) { return engine.new_order(std::move(request)); },
         [this](OrderId id) { return engine.cancel(id); },
         [this](ModifyRequest request) { return engine.modify(std::move(request)); },
-        [this]() { return next_id++; }, portfolio, strategy);
+        [this]() { return next_id++; },
+        [this](Side side) { return engine.book().best_price(side); }, portfolio, strategy);
   }
 };
 
@@ -86,6 +87,18 @@ TEST(OrderPort, RestingOrderLaterFilledByAnotherEngineCallIsAttributedToPortfoli
   EXPECT_EQ(fixture.portfolio.position(), 10);
   EXPECT_EQ(fixture.portfolio.cash(), -1000);
   EXPECT_EQ(fixture.portfolio.fill_count(), 1u);
+}
+
+TEST(OrderPort, BestPriceReflectsCurrentBookAndNulloptOnEmptySide) {
+  Fixture fixture;
+  OrderPort port = fixture.MakePort();
+
+  EXPECT_FALSE(port.BestPrice(Side::Buy).has_value());
+
+  port.Buy(OrderType::Limit, TimeInForce::GTC, /*price=*/100, /*quantity=*/10);
+  ASSERT_TRUE(port.BestPrice(Side::Buy).has_value());
+  EXPECT_EQ(*port.BestPrice(Side::Buy), 100);
+  EXPECT_FALSE(port.BestPrice(Side::Sell).has_value());
 }
 
 TEST(OrderPort, CancelAndModifyRouteThroughEngineAndNotifyStrategy) {

@@ -268,6 +268,17 @@ Sell/Cancel/Modify) passed into the strategy rather than exposing the
 engine directly — the strategy should not be able to inspect or bypass
 the same request validation every other participant is subject to.
 
+**Caught while writing the first real example strategy:** the initial
+cut of this interface gave a `Strategy` the resulting events and nothing
+else — no way to ask "what's the market trading at right now." Any
+price-aware decision (quote around the touch, only trade when the
+spread is tight, ...) needs that, so `OrderPort` also exposes
+`BestPrice(Side)`, backed by the same `engine_.book().best_price()`
+every other read path already uses. Recorded here because it's a good
+example of *why* "write the demo before calling the slice done" is part
+of the loop — the gap wasn't visible until something tried to use the
+interface for real.
+
 ### Portfolio and P&L
 
 A `Portfolio` tracks the strategy's own cash and position only, updated
@@ -288,8 +299,20 @@ check that a strategy which never trades reproduces exactly the same
 book trajectory Phase 2 already validates (confirms the backtester's
 reuse of `Adapter<Engine>` doesn't itself change engine behavior).
 
+`tools/backtest` is the CLI tool analogous to `tools/validate`: it runs
+one example strategy (`RestAtBestBidStrategy` — rests a single GTC buy
+at the current best bid the first time it observes the market, then
+does nothing else; honestly documented as a machinery demo, not a real
+trading strategy) against a real LOBSTER file and prints fills/P&L. Run
+against real AAPL/AMZN data, it reproduces exactly what the design
+predicts: a handful of real fills with sane, sanity-checkable P&L
+(e.g. buying 100 AAPL shares near the touch and marking a few rows
+later at +$2), then the adapter reports the *expected* divergence from
+LOBSTER's own orderbook file once the strategy's resting order has
+actually changed the book's history — the honest tradeoff of picking
+"real participation" over tape-approximated fills (see above).
+
 Deferred (not built yet, in rough expected-value order): multiple
 instruments, queue-position-aware resting-order fill realism, risk/
 position limits, richer performance stats (Sharpe, max drawdown),
-config-driven strategy parameters, a CLI tool analogous to
-`tools/validate`.
+config-driven strategy parameters/selection in the CLI.

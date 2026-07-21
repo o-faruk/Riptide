@@ -18,7 +18,7 @@ option(RIPTIDE_BUILD_TESTS "Build the GoogleTest suite" ON)
 # bench/ (see bench/CMakeLists.txt) -- the custom end-to-end replay
 # harness has no heavy fetched deps and always builds.
 option(RIPTIDE_BUILD_BENCH "Build the Google Benchmark microbenchmarks" OFF)
-option(RIPTIDE_BUILD_TOOLS "Build the LOBSTER validation tool" ON)
+option(RIPTIDE_BUILD_TOOLS "Build the LOBSTER validation and backtest demo tools" ON)
 
 include(cmake/CompilerWarnings.cmake)
 
@@ -35,4 +35,5 @@ endif()
 
 if(RIPTIDE_BUILD_TOOLS)
   add_subdirectory(tools/validate)
+  add_subdirectory(tools/backtest)
 endif()
