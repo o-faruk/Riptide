@@ -5,11 +5,18 @@
 // row only ever shows an order's resting remainder (see
 // docs/DESIGN.md), so real-data replay essentially never exercises the
 // crossing path. This file constructs that scenario directly instead.
+//
+// Every benchmark is templated on Book/Engine type and instantiated for
+// both OrderBook/ReferenceEngine and PooledOrderBook/PooledMatchingEngine
+// -- same reasoning as MatchingEngine<Book> itself: one definition, run
+// against whichever type is being compared, rather than a hand-copied
+// twin benchmark per optimization that can drift out of sync.
 
 #include <benchmark/benchmark.h>
 
 #include "riptide/matching_engine.hpp"
 #include "riptide/order_book.hpp"
+#include "riptide/pooled_order_book.hpp"
 
 namespace {
 
@@ -18,6 +25,7 @@ using riptide::Order;
 using riptide::OrderBook;
 using riptide::OrderId;
 using riptide::OrderType;
+using riptide::PooledOrderBook;
 using riptide::Quantity;
 using riptide::ReferenceEngine;
 using riptide::Sequence;
@@ -37,40 +45,45 @@ Order MakeRestingOrder(OrderId id, Side side, riptide::Price price, Quantity qty
 
 // The cheapest possible resting-order path: insert into an otherwise-
 // empty price level, no crossing, no FIFO queue to walk.
+template <typename Book>
 void BM_OrderBookInsert(benchmark::State& state) {
   OrderId next_id = 1;
   for (auto _ : state) {
     state.PauseTiming();  // fresh book per iteration excluded from timing
-    OrderBook book;
+    Book book;
     state.ResumeTiming();
     book.insert(MakeRestingOrder(next_id, Side::Buy, 1000, 10, next_id));
     ++next_id;
   }
 }
-BENCHMARK(BM_OrderBookInsert);
+BENCHMARK_TEMPLATE(BM_OrderBookInsert, OrderBook);
+BENCHMARK_TEMPLATE(BM_OrderBookInsert, PooledOrderBook);
 
 // Insert immediately followed by remove: the resting-then-cancel path.
+template <typename Book>
 void BM_OrderBookInsertThenRemove(benchmark::State& state) {
   OrderId next_id = 1;
   for (auto _ : state) {
     state.PauseTiming();
-    OrderBook book;
+    Book book;
     const OrderId id = next_id++;
     book.insert(MakeRestingOrder(id, Side::Buy, 1000, 10, id));
     state.ResumeTiming();
     benchmark::DoNotOptimize(book.remove(id));
   }
 }
-BENCHMARK(BM_OrderBookInsertThenRemove);
+BENCHMARK_TEMPLATE(BM_OrderBookInsertThenRemove, OrderBook);
+BENCHMARK_TEMPLATE(BM_OrderBookInsertThenRemove, PooledOrderBook);
 
 // MatchingEngine::new_order, resting (non-crossing): a GTC limit order on
 // an empty book -- the "add order" cost paid for every quote that
 // doesn't immediately trade, which real replay data is dominated by.
+template <typename Engine>
 void BM_EngineNewOrderResting(benchmark::State& state) {
   OrderId next_id = 1;
   for (auto _ : state) {
     state.PauseTiming();
-    ReferenceEngine engine;
+    Engine engine;
     state.ResumeTiming();
     engine.new_order(NewOrderRequest{.id = next_id++,
                                       .side = Side::Buy,
@@ -80,21 +93,22 @@ void BM_EngineNewOrderResting(benchmark::State& state) {
                                       .quantity = 10});
   }
 }
-BENCHMARK(BM_EngineNewOrderResting);
+BENCHMARK_TEMPLATE(BM_EngineNewOrderResting, ReferenceEngine);
+BENCHMARK_TEMPLATE(BM_EngineNewOrderResting, riptide::PooledMatchingEngine);
 
 // MatchingEngine::new_order, crossing: pre-populate `sweep_depth` resting
 // sell orders at consecutive price levels, then submit one marketable
 // buy that walks and fully consumes all of them in a single call.
 // Parameterized so the log shows how crossing cost scales with the
-// number of price levels/orders swept — the thing Phase 4's price-level
-// lookup and intrusive-list work will actually target.
+// number of price levels/orders swept.
+template <typename Engine>
 void BM_EngineNewOrderCrossing(benchmark::State& state) {
   const auto sweep_depth = static_cast<int>(state.range(0));
   OrderId next_id = 1;
 
   for (auto _ : state) {
     state.PauseTiming();  // book setup excluded from timing
-    ReferenceEngine engine;
+    Engine engine;
     for (int level = 0; level < sweep_depth; ++level) {
       engine.new_order(NewOrderRequest{.id = next_id++,
                                         .side = Side::Sell,
@@ -114,6 +128,11 @@ void BM_EngineNewOrderCrossing(benchmark::State& state) {
   }
   state.SetItemsProcessed(state.iterations() * sweep_depth);
 }
-BENCHMARK(BM_EngineNewOrderCrossing)->Arg(1)->Arg(10)->Arg(50)->Arg(100);
+BENCHMARK_TEMPLATE(BM_EngineNewOrderCrossing, ReferenceEngine)->Arg(1)->Arg(10)->Arg(50)->Arg(100);
+BENCHMARK_TEMPLATE(BM_EngineNewOrderCrossing, riptide::PooledMatchingEngine)
+    ->Arg(1)
+    ->Arg(10)
+    ->Arg(50)
+    ->Arg(100);
 
 }  // namespace

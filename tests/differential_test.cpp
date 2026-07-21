@@ -1,13 +1,17 @@
-// Right now this is Reference-vs-itself: a broad, randomized extension
-// of Phase 1's hand-written determinism test (edge_cases_test.cpp) —
-// replaying the identical operation sequence through two fresh engines
-// must produce byte-for-byte identical event streams. The moment Phase 4
-// produces a second, optimized engine, this becomes a TRUE differential
-// test: change RunSequence's engine type on one side to the optimized
-// engine, keep the other as ReferenceEngine, same assertion. That's the
-// whole point of building this now, before there's anything to diff
-// against — the harness is proven correct on a case with a known answer
-// (two identical engines must match) before it has to catch a real bug.
+// Reference-vs-Pooled: replaying the identical operation sequence
+// through ReferenceEngine (Phase 1's unoptimized std::list<Order>) and
+// PooledMatchingEngine (optimization #1 — docs/OPTIMIZATION_LOG.md, a
+// pooled allocator for the same FIFO queue's nodes) must produce
+// byte-for-byte identical event streams. This is what "an optimization
+// isn't real until it matches the reference" means operationally: if
+// this test ever fails, the corresponding optimization gets reverted,
+// full stop, before anything else happens (see the loop in
+// docs/OPTIMIZATION_LOG.md).
+//
+// As more optimized engines are added, extend RunSequence/the test
+// cases below to cover each one against ReferenceEngine, rather than
+// only ever comparing the two most recent — a regression in an earlier
+// optimization wouldn't be caught by a test that stopped checking it.
 
 #include "random_sequence.hpp"
 
@@ -15,11 +19,14 @@
 
 #include <cstdint>
 
+#include "riptide/pooled_order_book.hpp"
+
 namespace riptide::fuzzing {
 namespace {
 
+template <typename Engine>
 std::vector<Event> RunSequence(const std::vector<Operation>& ops) {
-  ReferenceEngine engine;
+  Engine engine;
   std::vector<Event> all_events;
   for (const Operation& op : ops) {
     std::vector<Event> events = Apply(engine, op);
@@ -30,13 +37,13 @@ std::vector<Event> RunSequence(const std::vector<Operation>& ops) {
 
 class DifferentialTest : public ::testing::TestWithParam<std::uint64_t> {};
 
-TEST_P(DifferentialTest, TwoEnginesOnTheSameSequenceProduceIdenticalEvents) {
+TEST_P(DifferentialTest, PooledMatchesReferenceOnTheSameSequence) {
   const std::vector<Operation> ops = GenerateRandomSequence(GetParam(), 500);
 
-  const std::vector<Event> first = RunSequence(ops);
-  const std::vector<Event> second = RunSequence(ops);
+  const std::vector<Event> reference = RunSequence<ReferenceEngine>(ops);
+  const std::vector<Event> pooled = RunSequence<PooledMatchingEngine>(ops);
 
-  EXPECT_EQ(first, second);
+  EXPECT_EQ(reference, pooled);
 }
 
 // A spread of seeds, not just one — different seeds exercise different

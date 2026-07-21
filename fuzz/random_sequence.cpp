@@ -1,7 +1,6 @@
 #include "random_sequence.hpp"
 
 #include <random>
-#include <type_traits>
 
 namespace riptide::fuzzing {
 
@@ -92,21 +91,6 @@ std::vector<Operation> GenerateRandomSequence(std::uint64_t seed, int count) {
   }
 
   return ops;
-}
-
-std::vector<Event> Apply(ReferenceEngine& engine, const Operation& operation) {
-  return std::visit(
-      [&engine](const auto& op) -> std::vector<Event> {
-        using T = std::decay_t<decltype(op)>;
-        if constexpr (std::is_same_v<T, NewOp>) {
-          return engine.new_order(op.request);
-        } else if constexpr (std::is_same_v<T, CancelOp>) {
-          return engine.cancel(op.id);
-        } else {
-          return engine.modify(op.request);
-        }
-      },
-      operation);
 }
 
 }  // namespace riptide::fuzzing

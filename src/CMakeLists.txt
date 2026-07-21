@@ -1,6 +1,7 @@
 add_library(riptide_core
   version.cpp
   order_book.cpp
+  pooled_order_book.cpp
   fixed_size_pool.cpp
 )
 

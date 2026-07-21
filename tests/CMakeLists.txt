@@ -19,6 +19,7 @@ add_executable(riptide_tests
   stats_test.cpp
   differential_test.cpp
   fixed_size_pool_test.cpp
+  pooled_order_book_test.cpp
 )
 
 target_link_libraries(riptide_tests

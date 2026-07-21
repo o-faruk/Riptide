@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <type_traits>
 #include <variant>
 #include <vector>
 
@@ -38,7 +39,24 @@ std::vector<Operation> GenerateRandomSequence(std::uint64_t seed, int count);
 
 // Applies one Operation to `engine` and returns the resulting events —
 // shared by the differential test and the fuzz harness so both drive an
-// engine identically.
-std::vector<Event> Apply(ReferenceEngine& engine, const Operation& operation);
+// engine identically. Templated (rather than fixed to ReferenceEngine)
+// so the differential test can drive any MatchingEngine<Book>
+// instantiation with the same code — the entire point being that
+// Reference and every optimized engine get exercised identically.
+template <typename Engine>
+std::vector<Event> Apply(Engine& engine, const Operation& operation) {
+  return std::visit(
+      [&engine](const auto& op) -> std::vector<Event> {
+        using T = std::decay_t<decltype(op)>;
+        if constexpr (std::is_same_v<T, NewOp>) {
+          return engine.new_order(op.request);
+        } else if constexpr (std::is_same_v<T, CancelOp>) {
+          return engine.cancel(op.id);
+        } else {
+          return engine.modify(op.request);
+        }
+      },
+      operation);
+}
 
 }  // namespace riptide::fuzzing
