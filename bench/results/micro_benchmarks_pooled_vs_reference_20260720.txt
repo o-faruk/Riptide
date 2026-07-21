@@ -1,0 +1,66 @@
+Command: git pull origin main
+         cmake --preset release -DRIPTIDE_BUILD_BENCH=ON
+         cmake --build build/release -j
+         ./build/release/bench/riptide_bench_micro \
+           --benchmark_filter='BM_EngineNewOrderResting|BM_EngineNewOrderCrossing' \
+           --benchmark_repetitions=10 \
+           --benchmark_report_aggregates_only=true
+Date: 2026-07-20
+Machine: see environment_20260720.txt (AMD Ryzen 5 7600X, WSL2 Ubuntu 26.04)
+Build: release preset (-O3 -DNDEBUG), Google Benchmark v1.9.1
+Purpose: docs/OPTIMIZATION_LOG.md entry #1 (order pool allocator) --
+         ReferenceEngine vs. PooledMatchingEngine, 10 repetitions,
+         aggregates-only.
+
+2026-07-20T22:18:04-04:00
+Running ./build/release/bench/riptide_bench_micro
+Run on (12 X 4691.08 MHz CPU s)
+CPU Caches:
+  L1 Data 32 KiB (x6)
+  L1 Instruction 32 KiB (x6)
+  L2 Unified 1024 KiB (x6)
+  L3 Unified 32768 KiB (x1)
+Load Average: 1.12, 0.23, 0.08
+--------------------------------------------------------------------------------------------------------------
+Benchmark                                                                    Time             CPU   Iterations
+--------------------------------------------------------------------------------------------------------------
+BM_EngineNewOrderResting<ReferenceEngine>_mean                             471 ns          472 ns           10
+BM_EngineNewOrderResting<ReferenceEngine>_median                           463 ns          464 ns           10
+BM_EngineNewOrderResting<ReferenceEngine>_stddev                          15.8 ns         16.6 ns           10
+BM_EngineNewOrderResting<ReferenceEngine>_cv                              3.35 %          3.52 %            10
+BM_EngineNewOrderResting<riptide::PooledMatchingEngine>_mean               464 ns          465 ns           10
+BM_EngineNewOrderResting<riptide::PooledMatchingEngine>_median             461 ns          460 ns           10
+BM_EngineNewOrderResting<riptide::PooledMatchingEngine>_stddev            10.3 ns         11.4 ns           10
+BM_EngineNewOrderResting<riptide::PooledMatchingEngine>_cv                2.21 %          2.46 %            10
+BM_EngineNewOrderCrossing<ReferenceEngine>/1_mean                          457 ns          457 ns           10 items_per_second=2.19034M/s
+BM_EngineNewOrderCrossing<ReferenceEngine>/1_median                        450 ns          451 ns           10 items_per_second=2.21974M/s
+BM_EngineNewOrderCrossing<ReferenceEngine>/1_stddev                       10.8 ns         10.4 ns           10 items_per_second=49.4586k/s
+BM_EngineNewOrderCrossing<ReferenceEngine>/1_cv                           2.36 %          2.28 %            10 items_per_second=2.26%
+BM_EngineNewOrderCrossing<ReferenceEngine>/10_mean                         734 ns          733 ns           10 items_per_second=13.6506M/s
+BM_EngineNewOrderCrossing<ReferenceEngine>/10_median                       727 ns          726 ns           10 items_per_second=13.7741M/s
+BM_EngineNewOrderCrossing<ReferenceEngine>/10_stddev                      19.2 ns         19.0 ns           10 items_per_second=347.057k/s
+BM_EngineNewOrderCrossing<ReferenceEngine>/10_cv                          2.62 %          2.59 %            10 items_per_second=2.54%
+BM_EngineNewOrderCrossing<ReferenceEngine>/50_mean                        2530 ns         2528 ns           10 items_per_second=19.8091M/s
+BM_EngineNewOrderCrossing<ReferenceEngine>/50_median                      2498 ns         2496 ns           10 items_per_second=20.0305M/s
+BM_EngineNewOrderCrossing<ReferenceEngine>/50_stddev                       103 ns          102 ns           10 items_per_second=751.289k/s
+BM_EngineNewOrderCrossing<ReferenceEngine>/50_cv                          4.08 %          4.03 %            10 items_per_second=3.79%
+BM_EngineNewOrderCrossing<ReferenceEngine>/100_mean                       4938 ns         4936 ns           10 items_per_second=20.2779M/s
+BM_EngineNewOrderCrossing<ReferenceEngine>/100_median                     4891 ns         4893 ns           10 items_per_second=20.4394M/s
+BM_EngineNewOrderCrossing<ReferenceEngine>/100_stddev                      154 ns          153 ns           10 items_per_second=593.527k/s
+BM_EngineNewOrderCrossing<ReferenceEngine>/100_cv                         3.12 %          3.10 %            10 items_per_second=2.93%
+BM_EngineNewOrderCrossing<riptide::PooledMatchingEngine>/1_mean            445 ns          445 ns           10 items_per_second=2.24641M/s
+BM_EngineNewOrderCrossing<riptide::PooledMatchingEngine>/1_median          444 ns          444 ns           10 items_per_second=2.25233M/s
+BM_EngineNewOrderCrossing<riptide::PooledMatchingEngine>/1_stddev         2.94 ns         2.95 ns           10 items_per_second=14.7179k/s
+BM_EngineNewOrderCrossing<riptide::PooledMatchingEngine>/1_cv             0.66 %          0.66 %            10 items_per_second=0.66%
+BM_EngineNewOrderCrossing<riptide::PooledMatchingEngine>/10_mean           681 ns          680 ns           10 items_per_second=14.7025M/s
+BM_EngineNewOrderCrossing<riptide::PooledMatchingEngine>/10_median         678 ns          678 ns           10 items_per_second=14.7536M/s
+BM_EngineNewOrderCrossing<riptide::PooledMatchingEngine>/10_stddev        9.54 ns         9.33 ns           10 items_per_second=200.622k/s
+BM_EngineNewOrderCrossing<riptide::PooledMatchingEngine>/10_cv            1.40 %          1.37 %            10 items_per_second=1.36%
+BM_EngineNewOrderCrossing<riptide::PooledMatchingEngine>/50_mean          2247 ns         2249 ns           10 items_per_second=22.2663M/s
+BM_EngineNewOrderCrossing<riptide::PooledMatchingEngine>/50_median        2204 ns         2206 ns           10 items_per_second=22.6674M/s
+BM_EngineNewOrderCrossing<riptide::PooledMatchingEngine>/50_stddev        93.1 ns         92.9 ns           10 items_per_second=896.049k/s
+BM_EngineNewOrderCrossing<riptide::PooledMatchingEngine>/50_cv            4.14 %          4.13 %            10 items_per_second=4.02%
+BM_EngineNewOrderCrossing<riptide::PooledMatchingEngine>/100_mean         4225 ns         4230 ns           10 items_per_second=23.6436M/s
+BM_EngineNewOrderCrossing<riptide::PooledMatchingEngine>/100_median       4220 ns         4223 ns           10 items_per_second=23.6821M/s
+BM_EngineNewOrderCrossing<riptide::PooledMatchingEngine>/100_stddev       49.5 ns         49.8 ns           10 items_per_second=275.795k/s
+BM_EngineNewOrderCrossing<riptide::PooledMatchingEngine>/100_cv           1.17 %          1.18 %            10 items_per_second=1.17%

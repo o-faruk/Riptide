@@ -61,17 +61,87 @@ same machine, same methodology. Link to the `bench/results/` files.
 
 ## Entries
 
-None yet — Phase 4 has just started. Profiling against the Phase 3
-baseline (`bench/results/`) on the real target machine (see
-`bench/ENVIRONMENT.md`) is the next step before any candidate
-optimization gets a hypothesis, let alone code.
+### 1. Order pool allocator — 2026-07-20
+
+**Profile evidence**: `perf stat` against `bench/replay_harness` on the
+target machine (AMD Ryzen 5 7600X, WSL2 Ubuntu 26.04) showed
+444196 cache-misses, 6623268 branch-misses, 1492573768 instructions,
+642105197 cycles — but a large share of that self-time turned out to be
+the harness's own CSV parsing and `bench/stats.cpp`'s percentile/
+histogram sorting (`std::__introsort_loop`, ~19% self-time), not engine
+code, since a real LOBSTER type-1 row only ever shows an order's resting
+remainder and essentially never exercises the crossing path (see
+`docs/DESIGN.md`). Re-profiling `riptide_bench_micro
+--benchmark_filter=BM_EngineNewOrderCrossing` with
+`perf record -g --call-graph dwarf` instead (7556 samples, isolated to
+just the engine under a synthetic crossing scenario) gave a much cleaner
+signal: roughly 46% of self-time in `MatchingEngine`/`OrderBook` code
+proper, ~8.6% in `std::list`/`std::map`/`std::unordered_map` bookkeeping,
+~6.1% in raw heap allocation (`malloc`/`cfree`), and ~9.24% specifically
+in `OrderBook::best_price`.
+
+**Hypothesis**: the FIFO order queue (`std::list<Order>`) allocates and
+frees a heap node on every insert/remove. Crossing a multi-level sweep
+removes several fully-filled orders in one `new_order` call, hitting
+`malloc`/`free` repeatedly on a call stack where nothing else needs the
+general-purpose allocator's flexibility (fixed node size, LIFO-friendly
+reuse pattern). Replacing it with a pre-allocated, fixed-block-size pool
+with an intrusive free list should cut that ~6.1% heap-allocation cost
+and reduce the cache-miss overhead of scattered heap nodes, with the
+effect scaling with how many orders a single call has to remove (deeper
+sweeps = more allocator calls avoided) and being negligible on a simple
+resting insert (only ever one allocation either way, dominated by the
+surrounding map/hash-map bookkeeping instead).
+
+**Change**: `include/riptide/fixed_size_pool.hpp` + `src/fixed_size_pool.cpp`
+(`FixedSizePool`: pre-allocated slabs, intrusive free list, O(1)
+allocate/deallocate, doubles capacity on exhaustion) and
+`include/riptide/pool_allocator.hpp` (`PoolAllocator<T>`: minimal
+`std::allocator`-compliant wrapper backed by a function-local static pool
+per node type). `include/riptide/pooled_order_book.hpp` +
+`src/pooled_order_book.cpp` (`PooledOrderBook`): byte-for-byte duplicate
+of `OrderBook` with `std::list<Order, PoolAllocator<Order>>` as the only
+difference. `MatchingEngine` was made a class template
+(`MatchingEngine<Book>`, see its `OrderBookLike` concept) specifically so
+this and future optimized engines reuse the exact same matching logic
+rather than forking it — `PooledMatchingEngine = MatchingEngine<PooledOrderBook>`.
+
+**Validation**: `tests/differential_test.cpp` — `ReferenceEngine` vs.
+`PooledMatchingEngine` on 8 seeds x 500 random operations each, byte-for-
+byte identical event streams: PASS. Full suite (78 tests, including a
+5000-cycle high-churn pool stress test) passes, including under ASan:
+PASS. Phase 2's LOBSTER gate (`riptide_validate --engine pooled`)
+produces row-for-row identical results to `--engine reference` against
+the documented baselines (AAPL 11, AMZN 35, MSFT 6): PASS.
+
+**Before/after**: `riptide_bench_micro`, Release build, target machine
+(AMD Ryzen 5 7600X, WSL2 Ubuntu 26.04), 10 repetitions,
+aggregates-only:
+
+| Benchmark | Reference (mean) | Pooled (mean) | Delta |
+|---|---|---|---|
+| Resting insert, no crossing | 471 ns (σ 15.8, cv 3.35%) | 464 ns (σ 10.3, cv 2.21%) | −7 ns (−1.5%, within noise) |
+| Crossing, sweep depth 1 | 457 ns | 445 ns | −12 ns (−2.6%) |
+| Crossing, sweep depth 10 | 734 ns | 681 ns | −53 ns (−7.2%) |
+| Crossing, sweep depth 50 | 2530 ns | 2247 ns | −283 ns (−11.2%) |
+| Crossing, sweep depth 100 | 4938 ns | 4225 ns | −713 ns (−14.4%) |
+
+**Verdict**: Helped, kept. Matches the hypothesis exactly: negligible
+(noise-level) effect on a single resting insert, and a real,
+monotonically-growing improvement on crossing as sweep depth increases
+— up to 14.4% at depth 100. Real trading data is dominated by resting
+inserts (see the profile-evidence note above on why replay data rarely
+exercises crossing), so this optimization's practical value is
+concentrated in genuinely marketable order flow rather than the common
+case — worth keeping regardless, since it's a pure win with zero
+measured downside, but the next candidate should target something that
+also helps the resting-insert path (e.g. the price-level lookup or
+order-ID map candidates below) if overall replay throughput is the goal.
 
 Candidate list, roughly in expected-value order (from the project's
 original scope — actual order will follow whatever profiling data
 actually shows, not this list):
 
-- Order pool allocator (pre-allocated slab, free-list reuse, zero
-  allocation on the hot path)
 - Intrusive doubly-linked lists for FIFO queues, O(1) cancel via an
   order-ID -> node handle map
 - Price-level lookup: flat array indexed by tick offset near the
