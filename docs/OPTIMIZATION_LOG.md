@@ -157,3 +157,25 @@ actually shows, not this list):
 Stop optimizing when the profile flattens or effort stops paying off —
 and say so here, explicitly, when it happens. Knowing when to stop is
 itself a signal worth recording.
+
+## Status: Phase 4 paused here — 2026-07-21
+
+Stopping after one entry (the order pool allocator). This is **not**
+"the profile flattened" — entry #1's own `perf record` breakdown shows
+real remaining self-time in `std::list`/`std::map`/`std::unordered_map`
+bookkeeping (~8.6%) and `OrderBook::best_price` (~9.24%), so the
+price-level-lookup and order-ID-map candidates below would very likely
+show a real, measurable win if pursued. This is an explicit scope/time
+decision instead: Riptide is a portfolio project targeting Summer 2027
+internship applications, and at this point the marginal value of
+another single-digit-to-low-teens percent latency win is lower than
+finishing Phase 5 (event-driven backtester) and Phase 6 (documentation)
+with the time remaining. The distinction matters because the loop's own
+rule is to record *why* optimization stopped, honestly, rather than
+imply the well ran dry when it didn't.
+
+Deferred, unexplored, in case Phase 4 is resumed later: intrusive FIFO
+lists, flat price-level array, order-ID hash map replacement,
+cache-friendly SoA layout, branch/PGO work, lock-free SPSC ring buffer,
+huge pages — the full list above, none of which have been profiled
+against the real target machine yet.
