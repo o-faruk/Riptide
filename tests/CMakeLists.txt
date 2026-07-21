@@ -18,6 +18,7 @@ add_executable(riptide_tests
   edge_cases_test.cpp
   stats_test.cpp
   differential_test.cpp
+  fixed_size_pool_test.cpp
 )
 
 target_link_libraries(riptide_tests
