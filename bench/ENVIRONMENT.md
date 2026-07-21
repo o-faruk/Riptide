@@ -152,29 +152,71 @@ engine if reported.
 
 ## Results
 
-`bench/results/environment_20260720.txt` and
-`bench/results/replay_baseline_20260720_AAPL.txt` are the literal,
-unedited output of the commands in "Reproducing on the real target
-machine" above, run 2026-07-20 on the machine described at the top of
-this document. AAPL, 2012-06-21, level-10 sample, `release` build,
-10 independent runs, median [Q1, Q3]:
+`bench/results/` holds the literal, unedited output of every command in
+"Reproducing on the real target machine" above, run on the machine
+described at the top of this document. All three of Phase 2's validated
+tickers (AAPL, AMZN, MSFT), 2012-06-21, level-10 sample, `release`
+build, 10 independent runs each, median [Q1, Q3]:
 
-| Category | p50 | p90 | p99 | p99.9 | p99.99 | max | n |
-|---|---|---|---|---|---|---|---|
-| all | 70ns | 130ns | 261ns | 561ns | 9157ns | 43593ns | 315088 |
-| new | 81ns | 150ns | 321ns | 662ns | 9709ns | 39350ns | 164773 |
-| cancel | 60ns | 91ns | 151ns | 261ns | 1323ns | 38614ns | 147485 |
-| modify | 41ns | 90ns | 170ns | 251ns | 391ns | 391ns | 2830 |
+**AAPL** (`replay_baseline_20260720_AAPL.txt`, n=315,088):
 
-Steady-state throughput: **3,675,918 msg/s** (median across 10 runs;
-[3,610,728, 3,703,745] IQR).
+| Category | p50 | p90 | p99 | p99.9 | p99.99 | max |
+|---|---|---|---|---|---|---|
+| all | 70ns | 130ns | 261ns | 561ns | 9157ns | 43593ns |
+| new | 81ns | 150ns | 321ns | 662ns | 9709ns | 39350ns |
+| cancel | 60ns | 91ns | 151ns | 261ns | 1323ns | 38614ns |
+| modify | 41ns | 90ns | 170ns | 251ns | 391ns | 391ns |
 
-These are New/Cancel/Modify latencies measured directly through
+Throughput: **3,675,918 msg/s** [3,610,728, 3,703,745]
+
+**AMZN** (`replay_baseline_20260721_AMZN.txt`, n=207,892):
+
+| Category | p50 | p90 | p99 | p99.9 | p99.99 | max |
+|---|---|---|---|---|---|---|
+| all | 60ns | 100ns | 171ns | 401ns | 5481ns | 28945ns |
+| new | 71ns | 111ns | 211ns | 522ns | 7575ns | 28444ns |
+| cancel | 50ns | 71ns | 110ns | 180ns | 932ns | 27031ns |
+| modify | 40ns | 60ns | 130ns | 180ns | 241ns | 241ns |
+
+Throughput: **4,325,952 msg/s** [4,236,604, 4,353,588]
+
+**MSFT** (`replay_baseline_20260721_MSFT.txt`, n=584,635):
+
+| Category | p50 | p90 | p99 | p99.9 | p99.99 | max |
+|---|---|---|---|---|---|---|
+| all | 50ns | 81ns | 161ns | 521ns | 1943ns | 30548ns |
+| new | 60ns | 91ns | 231ns | 651ns | 3637ns | 23925ns |
+| cancel | 40ns | 60ns | 91ns | 160ns | 381ns | 19597ns |
+| modify | 40ns | 60ns | 130ns | 191ns | 1373ns | 1373ns |
+
+Throughput: **4,577,080 msg/s** [4,565,813, 4,595,235]
+
+All three are New/Cancel/Modify latencies measured directly through
 `MatchingEngine`, deliberately not through the LOBSTER-correctness
-adapter (see `bench/replay_harness.cpp`'s header) and not including
-crossing cost — see `bench/micro_benchmarks.cpp` for that, still pending
-a `-DRIPTIDE_BUILD_BENCH=ON` run on this machine.
+adapter (see `bench/replay_harness.cpp`'s header). Consistent shape
+across tickers (cancel cheapest, new most expensive, modify in between
+but on very few samples — modify is rare in this data, n ≈ 2,700–4,800
+vs. hundreds of thousands for new/cancel) and consistent order-of-
+magnitude p50s (40–80ns) despite MSFT having ~2.8x AAPL's message count,
+which is a reasonable sanity check that these numbers reflect real,
+stable engine behavior rather than a one-off fluke.
 
-Only AAPL has been run as of this writing; AMZN and MSFT (the other two
-tickers Phase 2 validated) are natural next runs for a fuller baseline,
-same commands with a different ticker's file.
+**Crossing cost** (`micro_benchmarks_20260721.txt`, Google Benchmark,
+`-DRIPTIDE_BUILD_BENCH=ON`, single run — see that file for why it isn't
+put through the 10-run wrapper):
+
+| Sweep depth | Time/call | Per-order (items/s) |
+|---|---|---|
+| 1 | 468ns | 2.16M/s |
+| 10 | 786ns | 12.7M/s |
+| 50 | 2663ns | 18.8M/s |
+| 100 | 5097ns | 19.6M/s |
+
+Per-order cost *drops* as sweep depth grows (fixed per-call overhead —
+validation, sequence assignment, event vector setup — amortizing over
+more fills), which is exactly the kind of thing Phase 4's profiling
+should confirm or correct with real cache-miss/branch-miss data before
+touching anything. `BM_OrderBookInsert` (459ns) and
+`BM_EngineNewOrderResting` (471ns) are close, as expected — resting is
+dominated by the same map/list insert `OrderBookInsert` measures
+directly.

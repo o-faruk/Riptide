@@ -1,0 +1,33 @@
+Command: cmake --preset release -DRIPTIDE_BUILD_BENCH=ON && cmake --build --preset release
+         ./build/release/bench/riptide_bench_micro
+Date: 2026-07-21
+Machine: see environment_20260720.txt (AMD Ryzen 5 7600X, WSL2 Ubuntu 26.04)
+Build: release preset (-O3 -DNDEBUG), Google Benchmark v1.9.1
+
+2026-07-20T20:44:19-04:00
+Running ./build/release/bench/riptide_bench_micro
+Run on (12 X 4691.08 MHz CPU s)
+CPU Caches:
+  L1 Data 32 KiB (x6)
+  L1 Instruction 32 KiB (x6)
+  L2 Unified 1024 KiB (x6)
+  L3 Unified 32768 KiB (x1)
+Load Average: 0.33, 0.08, 0.03
+------------------------------------------------------------------------
+Benchmark                              Time             CPU   Iterations
+------------------------------------------------------------------------
+BM_OrderBookInsert                   459 ns          463 ns      1381692
+BM_OrderBookInsertThenRemove         440 ns          439 ns      1398109
+BM_EngineNewOrderResting             471 ns          477 ns      1492827
+BM_EngineNewOrderCrossing/1          468 ns          464 ns      1505777 items_per_second=2.15579M/s
+BM_EngineNewOrderCrossing/10         786 ns          785 ns       939657 items_per_second=12.7456M/s
+BM_EngineNewOrderCrossing/50        2663 ns         2659 ns       268064 items_per_second=18.8014M/s
+BM_EngineNewOrderCrossing/100       5097 ns         5102 ns       117109 items_per_second=19.6006M/s
+
+Note: this is a single Google Benchmark run (its own internal iteration
+count / convergence handles within-run statistical stability), not put
+through bench/run_replay_benchmark.sh's separate 10-process median/IQR
+discipline -- that wrapper is specific to riptide_bench_replay's output
+format. If Phase 4 needs tighter confidence on a specific number here,
+rerun this binary a few times and compare by hand, or extend the wrapper
+script to also handle Google Benchmark's own JSON/CSV output.

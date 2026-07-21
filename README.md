@@ -3,9 +3,10 @@
 A low-latency limit-order-book matching engine and event-driven backtester,
 built in modern C++.
 
-**Status: Phase 3 (benchmark methodology) in progress.** This README is a
-stub and will be rewritten properly in Phase 6 — see `docs/DESIGN.md` and
-`bench/ENVIRONMENT.md` for the real detail in the meantime.
+**Status: Phase 3 (benchmark methodology) complete; Phase 4 (latency
+engineering) next.** This README is a stub and will be rewritten properly
+in Phase 6 — see `docs/DESIGN.md` and `bench/ENVIRONMENT.md` for the real
+detail in the meantime.
 
 ## Correctness, so far
 
@@ -40,21 +41,24 @@ The project's original target machine (an Acer Nitro 5 laptop) broke
 mid-project and is no longer available; the target is now a desktop (AMD
 Ryzen 5 7600X) accessed via WSL2 on Windows — a real, disclosed change in
 what "the target machine" means for this project, detailed in
-`bench/ENVIRONMENT.md`. First real baseline, AAPL, `release` build,
-median across 10 independent runs:
+`bench/ENVIRONMENT.md`. Real baseline across all three of Phase 2's
+validated tickers, `release` build, median across 10 independent runs:
 
-| Category | p50 | p99 | p99.9 | max |
+| Ticker | p50 (all) | p99 (all) | max (all) | throughput |
 |---|---|---|---|---|
-| all messages | 70ns | 261ns | 561ns | 43.6µs |
-| new | 81ns | 321ns | 662ns | 39.4µs |
-| cancel | 60ns | 151ns | 261ns | 38.6µs |
-| modify | 41ns | 170ns | 251ns | 391ns |
+| AAPL | 70ns | 261ns | 43.6µs | 3.68M msg/s |
+| AMZN | 60ns | 171ns | 28.9µs | 4.33M msg/s |
+| MSFT | 50ns | 161ns | 30.5µs | 4.58M msg/s |
 
-Steady-state throughput: **~3.68M msg/s** (median). Full percentile
-table, IQRs, methodology, and known limitations (WSL2 exposes no CPU
-frequency governor at all, unlike bare-metal Linux) in
-`bench/ENVIRONMENT.md`. AMZN/MSFT baselines and the crossing-cost
-micro-benchmarks are the natural next runs.
+Consistent order of magnitude across tickers despite MSFT having ~2.8x
+AAPL's message count — a reasonable sanity check these are real, stable
+numbers rather than a one-off fluke. New/Cancel/Modify breakdown, IQRs,
+crossing-cost micro-benchmarks (crossing cost *drops* per-order as sweep
+depth grows, from 468ns at depth 1 to ~51ns/order at depth 100 — fixed
+per-call overhead amortizing over more fills, a real signal for Phase 4's
+profiling to confirm), full methodology, and known limitations (WSL2
+exposes no CPU frequency governor at all, unlike bare-metal Linux) all in
+`bench/ENVIRONMENT.md`.
 
 ## Build
 
@@ -73,7 +77,7 @@ Other presets: `relwithdebinfo`, `release`, `asan`, `ubsan`, `tsan`.
 0. Scaffolding — done
 1. Matching engine — correctness only, no optimization — done
 2. LOBSTER validation gate — the correctness bar the project must clear — done
-3. Honest benchmark methodology *(current — harness built; AAPL baseline captured, AMZN/MSFT + crossing micro-benchmarks pending)*
+3. Honest benchmark methodology — harness built, baselines captured (AAPL/AMZN/MSFT + crossing micro-benchmarks) — done
 4. Latency engineering — profiled, incremental, logged
 5. Event-driven backtester
 6. Documentation and presentation

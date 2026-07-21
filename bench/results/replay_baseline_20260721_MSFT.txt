@@ -1,0 +1,52 @@
+Command: ./bench/run_replay_benchmark.sh ./build/release/bench/riptide_bench_replay \
+    data/MSFT/MSFT_2012-06-21_34200000_57600000_message_10.csv 10
+Date: 2026-07-21
+Machine: see environment_20260720.txt (AMD Ryzen 5 7600X, WSL2 Ubuntu 26.04)
+Build: release preset (-O3 -DNDEBUG, no -march=native, no LTO)
+
+=== Percentiles: median [Q1, Q3] across 10 runs ===
+
+-- all --
+  count    median=584635     [584635, 584635]
+  p50      median=50         [50, 50]
+  p90      median=81         [81, 81]
+  p99      median=161        [161, 170]
+  p999     median=521        [511, 521]
+  p9999    median=1943       [1864, 2174]
+  max      median=30548      [23345, 34476]
+
+-- new --
+  count    median=303143     [303143, 303143]
+  p50      median=60         [60, 60]
+  p90      median=91         [91, 100]
+  p99      median=231        [230, 231]
+  p999     median=651        [642, 652]
+  p9999    median=3637       [2615, 4378]
+  max      median=23925      [22993, 29616]
+
+-- cancel --
+  count    median=276708     [276708, 276708]
+  p50      median=40         [40, 40]
+  p90      median=60         [60, 60]
+  p99      median=91         [90, 91]
+  p999     median=160        [151, 160]
+  p9999    median=381        [361, 421]
+  max      median=19597      [18004, 30548]
+
+-- modify --
+  count    median=4784       [4784, 4784]
+  p50      median=40         [40, 40]
+  p90      median=60         [60, 60]
+  p99      median=130        [130, 130]
+  p999     median=191        [190, 200]
+  p9999    median=1373       [672, 1553]
+  max      median=1373       [672, 1553]
+
+=== Throughput: median [Q1, Q3] across 10 runs (msg/s) ===
+  median=4577080 [4565813, 4595235]
+
+All latencies in nanoseconds, timer overhead already subtracted (see
+bench/replay_harness.cpp / bench/ENVIRONMENT.md for methodology). These
+are New/Cancel/Modify latencies only, measured directly through
+MatchingEngine -- not through the LOBSTER-correctness adapter, and not
+including crossing cost (see bench/micro_benchmarks.cpp for that).

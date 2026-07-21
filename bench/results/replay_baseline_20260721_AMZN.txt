@@ -1,0 +1,52 @@
+Command: ./bench/run_replay_benchmark.sh ./build/release/bench/riptide_bench_replay \
+    data/AMZN/AMZN_2012-06-21_34200000_57600000_message_10.csv 10
+Date: 2026-07-21
+Machine: see environment_20260720.txt (AMD Ryzen 5 7600X, WSL2 Ubuntu 26.04)
+Build: release preset (-O3 -DNDEBUG, no -march=native, no LTO)
+
+=== Percentiles: median [Q1, Q3] across 10 runs ===
+
+-- all --
+  count    median=207892     [207892, 207892]
+  p50      median=60         [60, 60]
+  p90      median=100        [100, 100]
+  p99      median=171        [171, 181]
+  p999     median=401        [391, 411]
+  p9999    median=5481       [3527, 8296]
+  max      median=28945      [27452, 43152]
+
+-- new --
+  count    median=106174     [106174, 106174]
+  p50      median=71         [71, 71]
+  p90      median=111        [111, 120]
+  p99      median=211        [211, 230]
+  p999     median=522        [521, 541]
+  p9999    median=7575       [6873, 8807]
+  max      median=28444      [25218, 36936]
+
+-- cancel --
+  count    median=99046      [99046, 99046]
+  p50      median=50         [50, 50]
+  p90      median=71         [71, 80]
+  p99      median=110        [110, 110]
+  p999     median=180        [171, 190]
+  p9999    median=932        [400, 6262]
+  max      median=27031      [21230, 34566]
+
+-- modify --
+  count    median=2672       [2672, 2672]
+  p50      median=40         [40, 40]
+  p90      median=60         [51, 60]
+  p99      median=130        [120, 130]
+  p999     median=180        [170, 200]
+  p9999    median=241        [211, 481]
+  max      median=241        [211, 481]
+
+=== Throughput: median [Q1, Q3] across 10 runs (msg/s) ===
+  median=4325952 [4236604, 4353588]
+
+All latencies in nanoseconds, timer overhead already subtracted (see
+bench/replay_harness.cpp / bench/ENVIRONMENT.md for methodology). These
+are New/Cancel/Modify latencies only, measured directly through
+MatchingEngine -- not through the LOBSTER-correctness adapter, and not
+including crossing cost (see bench/micro_benchmarks.cpp for that).
