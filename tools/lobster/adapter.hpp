@@ -39,7 +39,7 @@ namespace riptide::lobster {
 //     original queue positions relative to each other.
 class Adapter {
  public:
-  explicit Adapter(MatchingEngine& engine) : engine_(engine) {}
+  explicit Adapter(ReferenceEngine& engine) : engine_(engine) {}
 
   void SeedFromInitialBookState(const BookRow& seed_row);
 
@@ -80,7 +80,7 @@ class Adapter {
   std::optional<std::string> ApplyTotalDeletion(const Message& message);
   std::optional<std::string> ApplyVisibleExecution(const Message& message);
 
-  MatchingEngine& engine_;
+  ReferenceEngine& engine_;
   std::map<std::pair<Side, Price>, OrderId> pre_existing_buckets_;
   OrderId next_synthetic_id_ = std::numeric_limits<OrderId>::max();
 };

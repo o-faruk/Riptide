@@ -81,7 +81,7 @@ const char* CategoryName(Category category) {
 //     reproducing that correctly needs Adapter's bucket machinery, which
 //     is deliberately not used here, so these are skipped rather than
 //     silently applying a wrong delta.
-std::optional<Category> ApplyForBenchmark(riptide::MatchingEngine& engine,
+std::optional<Category> ApplyForBenchmark(riptide::ReferenceEngine& engine,
                                            const riptide::lobster::Message& message) {
   using riptide::ModifyRequest;
   using riptide::NewOrderRequest;
@@ -160,7 +160,7 @@ int main(int argc, char** argv) {
   std::cout << "Timer overhead (median): " << timer_overhead_ns << "ns"
             << " -- already subtracted from every latency reported below\n\n";
 
-  riptide::MatchingEngine engine;
+  riptide::ReferenceEngine engine;
   riptide::lobster::MessageReader messages(argv[1]);
   riptide::lobster::Message message;
 

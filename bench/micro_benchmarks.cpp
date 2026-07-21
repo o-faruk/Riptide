@@ -13,13 +13,13 @@
 
 namespace {
 
-using riptide::MatchingEngine;
 using riptide::NewOrderRequest;
 using riptide::Order;
 using riptide::OrderBook;
 using riptide::OrderId;
 using riptide::OrderType;
 using riptide::Quantity;
+using riptide::ReferenceEngine;
 using riptide::Sequence;
 using riptide::Side;
 using riptide::TimeInForce;
@@ -70,7 +70,7 @@ void BM_EngineNewOrderResting(benchmark::State& state) {
   OrderId next_id = 1;
   for (auto _ : state) {
     state.PauseTiming();
-    MatchingEngine engine;
+    ReferenceEngine engine;
     state.ResumeTiming();
     engine.new_order(NewOrderRequest{.id = next_id++,
                                       .side = Side::Buy,
@@ -94,7 +94,7 @@ void BM_EngineNewOrderCrossing(benchmark::State& state) {
 
   for (auto _ : state) {
     state.PauseTiming();  // book setup excluded from timing
-    MatchingEngine engine;
+    ReferenceEngine engine;
     for (int level = 0; level < sweep_depth; ++level) {
       engine.new_order(NewOrderRequest{.id = next_id++,
                                         .side = Side::Sell,

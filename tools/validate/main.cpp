@@ -88,7 +88,7 @@ int main(int argc, char** argv) {
   }
 
   try {
-    riptide::MatchingEngine engine;
+    riptide::ReferenceEngine engine;
     riptide::lobster::Adapter adapter(engine);
     riptide::lobster::MessageReader messages(argv[1]);
     riptide::lobster::OrderBookFileReader orderbook(argv[2]);

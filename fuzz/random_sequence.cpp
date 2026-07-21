@@ -94,7 +94,7 @@ std::vector<Operation> GenerateRandomSequence(std::uint64_t seed, int count) {
   return ops;
 }
 
-std::vector<Event> Apply(MatchingEngine& engine, const Operation& operation) {
+std::vector<Event> Apply(ReferenceEngine& engine, const Operation& operation) {
   return std::visit(
       [&engine](const auto& op) -> std::vector<Event> {
         using T = std::decay_t<decltype(op)>;

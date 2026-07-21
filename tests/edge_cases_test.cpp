@@ -41,7 +41,7 @@ namespace riptide {
 namespace {
 
 TEST(MatchingEngineEdgeCases, NegativePriceIsRejected) {
-  MatchingEngine engine;
+  ReferenceEngine engine;
   auto events = engine.new_order(NewOrderRequest{.id = 1,
                                                    .side = Side::Buy,
                                                    .type = OrderType::Limit,
@@ -60,7 +60,7 @@ TEST(MatchingEngineEdgeCases, NegativePriceIsRejected) {
 // field-for-field. This is what "fully deterministic" actually means
 // operationally, and it's the same property Phase 4's differential test
 // (reference engine vs. optimized engine) will lean on.
-std::vector<Event> RunScenario(MatchingEngine& engine) {
+std::vector<Event> RunScenario(ReferenceEngine& engine) {
   std::vector<Event> all_events;
   auto record = [&](std::vector<Event> events) {
     all_events.insert(all_events.end(), events.begin(), events.end());
@@ -104,8 +104,8 @@ std::vector<Event> RunScenario(MatchingEngine& engine) {
 }
 
 TEST(MatchingEngineEdgeCases, ReplayingTheSameSequenceProducesIdenticalEvents) {
-  MatchingEngine first;
-  MatchingEngine second;
+  ReferenceEngine first;
+  ReferenceEngine second;
 
   EXPECT_EQ(RunScenario(first), RunScenario(second));
 }

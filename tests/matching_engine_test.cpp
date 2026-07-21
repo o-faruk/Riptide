@@ -28,7 +28,7 @@ const T* EventAt(const std::vector<Event>& events, std::size_t index) {
 // ---- Resting: nothing to cross -------------------------------------------
 
 TEST(MatchingEngine, RestingLimitOrderOnEmptyBookOnlyAccepts) {
-  MatchingEngine engine;
+  ReferenceEngine engine;
   auto events = engine.new_order(Limit(1, Side::Buy, 1000, 10));
 
   ASSERT_EQ(events.size(), 1u);
@@ -42,7 +42,7 @@ TEST(MatchingEngine, RestingLimitOrderOnEmptyBookOnlyAccepts) {
 }
 
 TEST(MatchingEngine, NonMarketableLimitRestsWithoutCrossing) {
-  MatchingEngine engine;
+  ReferenceEngine engine;
   engine.new_order(Limit(1, Side::Sell, 1010, 10));  // resting ask far above
 
   auto events = engine.new_order(Limit(2, Side::Buy, 1000, 5));  // doesn't reach it
@@ -55,7 +55,7 @@ TEST(MatchingEngine, NonMarketableLimitRestsWithoutCrossing) {
 // ---- Crossing --------------------------------------------------------------
 
 TEST(MatchingEngine, AggressiveLimitFullyConsumesSmallerRestingOrder) {
-  MatchingEngine engine;
+  ReferenceEngine engine;
   engine.new_order(Limit(1, Side::Sell, 1000, 5));
 
   auto events = engine.new_order(Limit(2, Side::Buy, 1000, 10));
@@ -76,7 +76,7 @@ TEST(MatchingEngine, AggressiveLimitFullyConsumesSmallerRestingOrder) {
 }
 
 TEST(MatchingEngine, AggressiveLimitPartiallyFillsLargerRestingOrder) {
-  MatchingEngine engine;
+  ReferenceEngine engine;
   engine.new_order(Limit(1, Side::Sell, 1000, 10));
 
   auto events = engine.new_order(Limit(2, Side::Buy, 1000, 4));
@@ -93,7 +93,7 @@ TEST(MatchingEngine, AggressiveLimitPartiallyFillsLargerRestingOrder) {
 }
 
 TEST(MatchingEngine, FifoWithinLevelFillsOldestRestingOrderFirst) {
-  MatchingEngine engine;
+  ReferenceEngine engine;
   engine.new_order(Limit(1, Side::Sell, 1000, 3));
   engine.new_order(Limit(2, Side::Sell, 1000, 3));
 
@@ -111,7 +111,7 @@ TEST(MatchingEngine, FifoWithinLevelFillsOldestRestingOrderFirst) {
 }
 
 TEST(MatchingEngine, AggressiveLimitWalksMultiplePriceLevelsInPriceOrder) {
-  MatchingEngine engine;
+  ReferenceEngine engine;
   engine.new_order(Limit(1, Side::Sell, 1000, 5));
   engine.new_order(Limit(2, Side::Sell, 1001, 5));
 
@@ -138,7 +138,7 @@ TEST(MatchingEngine, AggressiveLimitWalksMultiplePriceLevelsInPriceOrder) {
 // ---- IOC ---------------------------------------------------------------
 
 TEST(MatchingEngine, IocRemainderIsCancelledNotRested) {
-  MatchingEngine engine;
+  ReferenceEngine engine;
   auto events = engine.new_order(Limit(1, Side::Buy, 1000, 10, TimeInForce::IOC));
 
   ASSERT_EQ(events.size(), 2u);
@@ -150,7 +150,7 @@ TEST(MatchingEngine, IocRemainderIsCancelledNotRested) {
 }
 
 TEST(MatchingEngine, IocPartiallyFillsThenCancelsRemainder) {
-  MatchingEngine engine;
+  ReferenceEngine engine;
   engine.new_order(Limit(1, Side::Sell, 1000, 4));
 
   auto events = engine.new_order(Limit(2, Side::Buy, 1000, 10, TimeInForce::IOC));
@@ -166,7 +166,7 @@ TEST(MatchingEngine, IocPartiallyFillsThenCancelsRemainder) {
 // ---- FOK -----------------------------------------------------------------
 
 TEST(MatchingEngine, FokRejectsAtomicallyWhenBookCannotFullyFill) {
-  MatchingEngine engine;
+  ReferenceEngine engine;
   engine.new_order(Limit(1, Side::Sell, 1000, 4));
 
   auto events = engine.new_order(Limit(2, Side::Buy, 1000, 10, TimeInForce::FOK));
@@ -183,7 +183,7 @@ TEST(MatchingEngine, FokRejectsAtomicallyWhenBookCannotFullyFill) {
 }
 
 TEST(MatchingEngine, FokFillsCompletelyWhenLiquiditySuffices) {
-  MatchingEngine engine;
+  ReferenceEngine engine;
   engine.new_order(Limit(1, Side::Sell, 1000, 6));
   engine.new_order(Limit(2, Side::Sell, 1001, 4));
 
@@ -199,7 +199,7 @@ TEST(MatchingEngine, FokFillsCompletelyWhenLiquiditySuffices) {
 // ---- Market ----------------------------------------------------------------
 
 TEST(MatchingEngine, MarketOrderAgainstEmptyBookCancelsEntirely) {
-  MatchingEngine engine;
+  ReferenceEngine engine;
   auto events = engine.new_order(Market(1, Side::Buy, 5, TimeInForce::IOC));
 
   ASSERT_EQ(events.size(), 2u);
@@ -210,7 +210,7 @@ TEST(MatchingEngine, MarketOrderAgainstEmptyBookCancelsEntirely) {
 }
 
 TEST(MatchingEngine, MarketOrderSweepsMultipleLevelsIgnoringPrice) {
-  MatchingEngine engine;
+  ReferenceEngine engine;
   engine.new_order(Limit(1, Side::Sell, 1000, 3));
   engine.new_order(Limit(2, Side::Sell, 1005, 7));
 
@@ -228,7 +228,7 @@ TEST(MatchingEngine, MarketOrderSweepsMultipleLevelsIgnoringPrice) {
 }
 
 TEST(MatchingEngine, MarketGtcIsRejectedAsInvalidTimeInForce) {
-  MatchingEngine engine;
+  ReferenceEngine engine;
   auto events = engine.new_order(Market(1, Side::Buy, 5, TimeInForce::GTC));
 
   ASSERT_EQ(events.size(), 1u);
@@ -240,7 +240,7 @@ TEST(MatchingEngine, MarketGtcIsRejectedAsInvalidTimeInForce) {
 // ---- Validation --------------------------------------------------------
 
 TEST(MatchingEngine, ZeroQuantityIsRejected) {
-  MatchingEngine engine;
+  ReferenceEngine engine;
   auto events = engine.new_order(Limit(1, Side::Buy, 1000, 0));
 
   ASSERT_EQ(events.size(), 1u);
@@ -250,7 +250,7 @@ TEST(MatchingEngine, ZeroQuantityIsRejected) {
 }
 
 TEST(MatchingEngine, NonPositivePriceIsRejected) {
-  MatchingEngine engine;
+  ReferenceEngine engine;
   auto events = engine.new_order(Limit(1, Side::Buy, 0, 10));
 
   ASSERT_EQ(events.size(), 1u);
@@ -260,7 +260,7 @@ TEST(MatchingEngine, NonPositivePriceIsRejected) {
 }
 
 TEST(MatchingEngine, MarketOrderCarryingAPriceIsRejected) {
-  MatchingEngine engine;
+  ReferenceEngine engine;
   auto events = engine.new_order(NewOrderRequest{.id = 1,
                                                    .side = Side::Buy,
                                                    .type = OrderType::Market,
@@ -275,7 +275,7 @@ TEST(MatchingEngine, MarketOrderCarryingAPriceIsRejected) {
 }
 
 TEST(MatchingEngine, DuplicateOrderIdIsRejectedAndLeavesOriginalIntact) {
-  MatchingEngine engine;
+  ReferenceEngine engine;
   engine.new_order(Limit(1, Side::Buy, 1000, 10));
 
   auto events = engine.new_order(Limit(1, Side::Sell, 2000, 3));
@@ -295,7 +295,7 @@ TEST(MatchingEngine, DuplicateOrderIdIsRejectedAndLeavesOriginalIntact) {
 // ---- Cancel ----------------------------------------------------------
 
 TEST(MatchingEngine, CancelOfRestingOrderRemovesItAndEmitsCancelled) {
-  MatchingEngine engine;
+  ReferenceEngine engine;
   engine.new_order(Limit(1, Side::Buy, 1000, 10));
 
   auto events = engine.cancel(1);
@@ -309,7 +309,7 @@ TEST(MatchingEngine, CancelOfRestingOrderRemovesItAndEmitsCancelled) {
 }
 
 TEST(MatchingEngine, CancelOfUnknownIdIsRejected) {
-  MatchingEngine engine;
+  ReferenceEngine engine;
   auto events = engine.cancel(999);
 
   ASSERT_EQ(events.size(), 1u);
@@ -319,7 +319,7 @@ TEST(MatchingEngine, CancelOfUnknownIdIsRejected) {
 }
 
 TEST(MatchingEngine, CancelOfAlreadyFullyFilledOrderIsRejected) {
-  MatchingEngine engine;
+  ReferenceEngine engine;
   engine.new_order(Limit(1, Side::Sell, 1000, 5));
   engine.new_order(Limit(2, Side::Buy, 1000, 5));  // fully fills order 1
 
@@ -332,7 +332,7 @@ TEST(MatchingEngine, CancelOfAlreadyFullyFilledOrderIsRejected) {
 }
 
 TEST(MatchingEngine, CancelOfTopOfBookOrderExposesNextBestPrice) {
-  MatchingEngine engine;
+  ReferenceEngine engine;
   engine.new_order(Limit(1, Side::Buy, 1005, 10));
   engine.new_order(Limit(2, Side::Buy, 1000, 10));
 
@@ -342,7 +342,7 @@ TEST(MatchingEngine, CancelOfTopOfBookOrderExposesNextBestPrice) {
 }
 
 TEST(MatchingEngine, CancelThatEmptiesAPriceLevelRemovesTheLevel) {
-  MatchingEngine engine;
+  ReferenceEngine engine;
   engine.new_order(Limit(1, Side::Buy, 1000, 10));
 
   engine.cancel(1);
@@ -352,7 +352,7 @@ TEST(MatchingEngine, CancelThatEmptiesAPriceLevelRemovesTheLevel) {
 }
 
 TEST(MatchingEngine, DoubleCancelSecondAttemptIsRejected) {
-  MatchingEngine engine;
+  ReferenceEngine engine;
   engine.new_order(Limit(1, Side::Buy, 1000, 10));
   engine.cancel(1);
 
@@ -365,7 +365,7 @@ TEST(MatchingEngine, DoubleCancelSecondAttemptIsRejected) {
 // ---- Modify ------------------------------------------------------------
 
 TEST(MatchingEngine, ModifyQuantityDecreaseKeepsPriorityAndQueuePosition) {
-  MatchingEngine engine;
+  ReferenceEngine engine;
   engine.new_order(Limit(1, Side::Buy, 1000, 10));
   engine.new_order(Limit(2, Side::Buy, 1000, 5));
 
@@ -388,7 +388,7 @@ TEST(MatchingEngine, ModifyQuantityDecreaseKeepsPriorityAndQueuePosition) {
 }
 
 TEST(MatchingEngine, ModifyQuantityIncreaseLosesPriorityAndMovesToBackOfQueue) {
-  MatchingEngine engine;
+  ReferenceEngine engine;
   engine.new_order(Limit(1, Side::Buy, 1000, 5));
   engine.new_order(Limit(2, Side::Buy, 1000, 5));
 
@@ -410,7 +410,7 @@ TEST(MatchingEngine, ModifyQuantityIncreaseLosesPriorityAndMovesToBackOfQueue) {
 }
 
 TEST(MatchingEngine, ModifyPriceChangeLosesPriorityAndMovesLevel) {
-  MatchingEngine engine;
+  ReferenceEngine engine;
   engine.new_order(Limit(1, Side::Buy, 1000, 10));
 
   auto events = engine.modify(ModifyRequest{.id = 1, .price = Price{999}, .quantity = std::nullopt});
@@ -426,7 +426,7 @@ TEST(MatchingEngine, ModifyPriceChangeLosesPriorityAndMovesLevel) {
 }
 
 TEST(MatchingEngine, ModifyThatRepricesIntoCrossingExecutesImmediately) {
-  MatchingEngine engine;
+  ReferenceEngine engine;
   engine.new_order(Limit(1, Side::Sell, 1000, 10));
   engine.new_order(Limit(2, Side::Buy, 990, 5));  // doesn't cross yet
 
@@ -446,7 +446,7 @@ TEST(MatchingEngine, ModifyThatRepricesIntoCrossingExecutesImmediately) {
 }
 
 TEST(MatchingEngine, ModifyOfUnknownIdIsRejected) {
-  MatchingEngine engine;
+  ReferenceEngine engine;
   auto events = engine.modify(ModifyRequest{.id = 999, .price = std::nullopt, .quantity = Quantity{5}});
 
   ASSERT_EQ(events.size(), 1u);
@@ -456,7 +456,7 @@ TEST(MatchingEngine, ModifyOfUnknownIdIsRejected) {
 }
 
 TEST(MatchingEngine, ModifyToZeroQuantityIsRejected) {
-  MatchingEngine engine;
+  ReferenceEngine engine;
   engine.new_order(Limit(1, Side::Buy, 1000, 10));
 
   auto events = engine.modify(ModifyRequest{.id = 1, .price = std::nullopt, .quantity = Quantity{0}});
@@ -472,7 +472,7 @@ TEST(MatchingEngine, ModifyToZeroQuantityIsRejected) {
 }
 
 TEST(MatchingEngine, ModifyToNonPositivePriceIsRejected) {
-  MatchingEngine engine;
+  ReferenceEngine engine;
   engine.new_order(Limit(1, Side::Buy, 1000, 10));
 
   auto events = engine.modify(ModifyRequest{.id = 1, .price = Price{0}, .quantity = std::nullopt});
@@ -484,7 +484,7 @@ TEST(MatchingEngine, ModifyToNonPositivePriceIsRejected) {
 }
 
 TEST(MatchingEngine, ModifyOfPartiallyFilledOrderOperatesOnRemainingNotOriginal) {
-  MatchingEngine engine;
+  ReferenceEngine engine;
   engine.new_order(Limit(1, Side::Buy, 1000, 10));
   engine.new_order(Limit(2, Side::Sell, 1000, 6));  // fills 6, leaves order 1 with remaining = 4
 

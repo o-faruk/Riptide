@@ -39,6 +39,6 @@ std::vector<Operation> GenerateRandomSequence(std::uint64_t seed, int count);
 // Applies one Operation to `engine` and returns the resulting events —
 // shared by the differential test and the fuzz harness so both drive an
 // engine identically.
-std::vector<Event> Apply(MatchingEngine& engine, const Operation& operation);
+std::vector<Event> Apply(ReferenceEngine& engine, const Operation& operation);
 
 }  // namespace riptide::fuzzing
