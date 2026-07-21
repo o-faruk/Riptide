@@ -211,6 +211,10 @@ docs/              DESIGN.md (design reasoning) and OPTIMIZATION_LOG.md
                    (every optimization attempt, including negative results).
 ```
 
+## License
+
+[MIT](LICENSE).
+
 ## Roadmap
 
 0. Scaffolding — done
