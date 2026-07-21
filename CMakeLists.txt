@@ -24,6 +24,7 @@ include(cmake/CompilerWarnings.cmake)
 
 add_subdirectory(src)
 add_subdirectory(tools/lobster)  # shared by tools/validate and bench/
+add_subdirectory(backtest)  # Phase 5: depends on riptide_core + riptide_lobster
 add_subdirectory(bench)
 add_subdirectory(fuzz)  # shared by the differential test and the fuzz target
 

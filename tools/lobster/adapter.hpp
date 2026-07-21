@@ -79,24 +79,44 @@ class Adapter {
   // this adapter's model of LOBSTER's semantics is wrong, or our book
   // has already diverged from LOBSTER's. Never something to silently
   // ignore.
-  std::optional<std::string> ApplyMessage(const Message& message) {
+  //
+  // `out_events`, if non-null, receives the events this row's single
+  // engine call produced (empty for row types that mutate nothing, e.g.
+  // 5-7). Phase 2's validate tool only cares about the resulting book
+  // state, hence the default of nullptr; Phase 5's Backtester (see
+  // backtest/backtester.hpp) needs the actual events so a Strategy can
+  // react to — and Portfolio can attribute fills from — this same
+  // real-market order flow, including a market row trading against the
+  // strategy's own resting order.
+  std::optional<std::string> ApplyMessage(const Message& message,
+                                           std::vector<Event>* out_events = nullptr) {
     switch (message.event_type) {
       case 1:
-        return ApplyNewOrder(message);
+        return ApplyNewOrder(message, out_events);
       case 2:
-        return ApplyPartialCancellation(message);
+        return ApplyPartialCancellation(message, out_events);
       case 3:
-        return ApplyTotalDeletion(message);
+        return ApplyTotalDeletion(message, out_events);
       case 4:
-        return ApplyVisibleExecution(message);
+        return ApplyVisibleExecution(message, out_events);
       case 5:   // execution of a hidden order — never entered our book, no mutation
       case 6:   // cross/auction trade — no visible book mutation
       case 7:   // trading halt — no visible book mutation
+        if (out_events != nullptr) out_events->clear();
         return std::nullopt;
       default:
         return "unrecognized LOBSTER event type " + std::to_string(message.event_type);
     }
   }
+
+  // Mints an ID guaranteed not to collide with any real LOBSTER order ID
+  // or any other ID this adapter has minted — the same counter
+  // SeedFromInitialBookState's buckets and type-4 synthesis already use
+  // (it starts at std::numeric_limits<OrderId>::max() and counts down,
+  // so it can never collide with LOBSTER's own, always-much-smaller,
+  // order IDs). Exposed publicly so Phase 5's Backtester can assign a
+  // Strategy's own order submissions IDs sharing this same engine.
+  OrderId ReserveOrderId() { return NextSyntheticId(); }
 
  private:
   // LOBSTER's dummy sentinels for an unoccupied price level (see
@@ -209,13 +229,14 @@ class Adapter {
   // seed/lazy-bucket approximating unknowable pre-existing liquidity
   // slightly wrong), and surfacing that immediately beats letting it
   // silently corrode the book further over every subsequent message.
-  std::optional<std::string> ApplyNewOrder(const Message& message) {
+  std::optional<std::string> ApplyNewOrder(const Message& message, std::vector<Event>* out_events) {
     const auto events = engine_.new_order(NewOrderRequest{.id = message.order_id,
                                                             .side = SideOf(message.direction),
                                                             .type = OrderType::Limit,
                                                             .tif = TimeInForce::GTC,
                                                             .price = message.price,
                                                             .quantity = message.size});
+    if (out_events != nullptr) *out_events = events;
     if (AnyRejected(events)) {
       return "new_order for order " + std::to_string(message.order_id) + " was rejected";
     }
@@ -232,7 +253,8 @@ class Adapter {
   // order lifecycles in sample data (e.g. an order submitted with size
   // 3, partially cancelled by 1, later fully deleted with size 2 —
   // 3-1=2).
-  std::optional<std::string> ApplyPartialCancellation(const Message& message) {
+  std::optional<std::string> ApplyPartialCancellation(const Message& message,
+                                                        std::vector<Event>* out_events) {
     Resolved resolved{};
     if (const auto error = Resolve(message.order_id, SideOf(message.direction), message.price,
                                     message.size, "partial cancellation", resolved);
@@ -253,6 +275,7 @@ class Adapter {
       // MatchingEngine's modify() correctly rejects a modify-to-zero, so
       // this goes through cancel() instead.
       const auto events = engine_.cancel(resolved.id);
+      if (out_events != nullptr) *out_events = events;
       if (AnyRejected(events)) {
         return "partial cancellation (as cancel, first sighting) for order " +
                std::to_string(message.order_id) + " was rejected";
@@ -262,6 +285,7 @@ class Adapter {
 
     const auto events = engine_.modify(
         ModifyRequest{.id = resolved.id, .price = std::nullopt, .quantity = new_remaining});
+    if (out_events != nullptr) *out_events = events;
     if (AnyRejected(events)) {
       return "partial cancellation (modify) for order " + std::to_string(message.order_id) +
              " was rejected";
@@ -269,7 +293,8 @@ class Adapter {
     return std::nullopt;
   }
 
-  std::optional<std::string> ApplyTotalDeletion(const Message& message) {
+  std::optional<std::string> ApplyTotalDeletion(const Message& message,
+                                                  std::vector<Event>* out_events) {
     Resolved resolved{};
     if (const auto error = Resolve(message.order_id, SideOf(message.direction), message.price,
                                     message.size, "total deletion", resolved);
@@ -278,6 +303,7 @@ class Adapter {
     }
 
     const auto events = engine_.cancel(resolved.id);
+    if (out_events != nullptr) *out_events = events;
     if (AnyRejected(events)) {
       return "cancel for order " + std::to_string(message.order_id) + " was rejected";
     }
@@ -294,7 +320,8 @@ class Adapter {
   // the time we reach this row (rows are applied strictly in file
   // order), this exactly-sized synthetic order can only ever match the
   // named resting order — never anything else.
-  std::optional<std::string> ApplyVisibleExecution(const Message& message) {
+  std::optional<std::string> ApplyVisibleExecution(const Message& message,
+                                                     std::vector<Event>* out_events) {
     Resolved resolved{};
     if (const auto error = Resolve(message.order_id, SideOf(message.direction), message.price,
                                     message.size, "execution", resolved);
@@ -313,6 +340,7 @@ class Adapter {
                                                             .tif = TimeInForce::IOC,
                                                             .price = message.price,
                                                             .quantity = message.size});
+    if (out_events != nullptr) *out_events = events;
     if (AnyRejected(events) || AnyCancelled(events)) {
       // A same-sized IOC that doesn't fill completely means our book
       // didn't actually have the liquidity this row claims — a real

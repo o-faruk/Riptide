@@ -208,3 +208,88 @@ Every candidate optimization gets profiled first against the real Phase
 3 baseline, on the real target machine — not guessed at from this dev
 machine, which (per `bench/ENVIRONMENT.md`) has no bearing on the
 project's real performance numbers.
+
+## Phase 5 — event-driven backtester
+
+### The market-impact question, and why the answer reuses `Adapter<Engine>`
+
+The central design question for any LOB backtester: once a strategy's
+own orders enter the book, does the replay still have to match history?
+Two answers exist. (a) *No market impact*: keep the strategy's orders
+out of the real matching engine entirely and approximate its fills
+against the historical trade tape (e.g. "the historical trade at this
+price/quantity would have also filled my resting order, assuming I was
+behind in queue"). This keeps the replay identical to LOBSTER's own
+orderbook file forever, but the fill approximation is a guess, not a
+match result. (b) *Real participation*: submit the strategy's orders to
+the exact same `MatchingEngine` instance that the rest of the market's
+order flow goes through. Fills are then real match results, not
+approximations — but the moment the strategy trades, subsequent book
+state can diverge from LOBSTER's historical orderbook file, since the
+strategy is now a real participant history didn't include.
+
+This project picks **(b)**, for a reason specific to what already
+exists: `tools/lobster/adapter.hpp`'s `Adapter<Engine>` already
+converts every LOBSTER message row into a real `new_order`/`cancel`/
+`modify` call against a live `MatchingEngine<Book>` — that's exactly
+"replay the market as real order flow," which Phase 2 already built and
+validated. The backtester reuses `Adapter<Engine>` unmodified as the
+*other-market-participants* feed, and interleaves the strategy's own
+order submissions into the same engine, in timestamp order. Divergence
+from LOBSTER's orderbook file after the strategy's first fill is
+expected and fine: Phase 5 isn't re-running Phase 2's validation gate
+(that only ever applies to the untouched replay), it's using LOBSTER as
+a source of realistic *other-participant* flow to backtest against, not
+a target the strategy must reproduce.
+
+Order-ID collision is already a solved problem here too:
+`Adapter::NextSyntheticId()` exists precisely to mint IDs that can't
+collide with real LOBSTER order IDs (for type-4 rows' synthesized
+aggressor). The strategy's order IDs reuse that same disjoint range.
+
+### Strategy interface
+
+A `Strategy` is an abstract base (virtual dispatch, not a template
+parameter like `Book` or `Engine`) — unlike the `Book` axis, which is a
+compile-time performance optimization, the strategy is user-supplied
+*behavior* meant to be swapped freely, including at a point in the
+roadmap (Phase 6) where more than one example strategy is expected to
+exist side by side. It gets two callbacks:
+
+- `OnMarketEvent(const std::vector<Event>&)` — fired after each LOBSTER
+  row is applied, before the strategy reacts. Gives the strategy the
+  resulting events and read access to the current book, so it can
+  decide whether to act.
+- `OnOwnEvent(const Event&)` — fired for every event resulting from the
+  strategy's own order submissions (accepted, filled, cancelled, ...).
+
+Order submission itself goes through a small `OrderPort` handle (Buy/
+Sell/Cancel/Modify) passed into the strategy rather than exposing the
+engine directly — the strategy should not be able to inspect or bypass
+the same request validation every other participant is subject to.
+
+### Portfolio and P&L
+
+A `Portfolio` tracks the strategy's own cash and position only, updated
+off `Trade` events where the strategy owns `resting_id` or
+`aggressor_id`. Mark-to-market P&L (`cash + position * mid_price`) can
+be computed at any point from the live book; realized P&L is the same
+formula at the run's end. Kept deliberately simple for the first slice
+— see deferred list below for what's cut.
+
+### First slice vs. deferred
+
+First slice: single instrument, one `Strategy` at a time, LOBSTER file
+as the market-flow source via `Adapter<Engine>`, cash+position P&L,
+plain end-of-run summary (fills, realized P&L, mark-to-market P&L,
+max position). Test plan mirrors Phase 1's philosophy: unit tests for
+`Portfolio` arithmetic against hand-computed fills, plus a regression
+check that a strategy which never trades reproduces exactly the same
+book trajectory Phase 2 already validates (confirms the backtester's
+reuse of `Adapter<Engine>` doesn't itself change engine behavior).
+
+Deferred (not built yet, in rough expected-value order): multiple
+instruments, queue-position-aware resting-order fill realism, risk/
+position limits, richer performance stats (Sharpe, max drawdown),
+config-driven strategy parameters, a CLI tool analogous to
+`tools/validate`.
