@@ -5,7 +5,6 @@
 add_library(riptide_lobster
   lobster_message.cpp
   lobster_book.cpp
-  adapter.cpp
 )
 
 target_include_directories(riptide_lobster

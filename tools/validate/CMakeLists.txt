@@ -1,6 +1,5 @@
 add_executable(riptide_validate
   main.cpp
-  comparator.cpp
 )
 
 target_link_libraries(riptide_validate

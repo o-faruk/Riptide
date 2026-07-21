@@ -10,13 +10,21 @@
 #include "lobster/lobster_book.hpp"
 #include "lobster/lobster_message.hpp"
 #include "riptide/matching_engine.hpp"
+#include "riptide/pooled_order_book.hpp"
 
 namespace {
 
 void PrintUsage(const char* argv0) {
   std::cerr
       << "Usage: " << argv0
-      << " <message.csv> <orderbook.csv> [--report-all] [--top N] [--after N] [--min-rows N]\n"
+      << " <message.csv> <orderbook.csv> [--engine reference|pooled] [--report-all] [--top N]"
+         " [--after N] [--min-rows N]\n"
+      << "\n"
+      << "--engine: which MatchingEngine<Book> instantiation to validate against.\n"
+      << "reference (default) is Phase 1's unoptimized engine; pooled is the pool-allocator\n"
+      << "optimization from Phase 4 (docs/OPTIMIZATION_LOG.md). Re-running this gate against\n"
+      << "an optimized engine is exactly how Phase 4's loop re-validates a change before\n"
+      << "trusting any benchmark result from it.\n"
       << "\n"
       << "LOBSTER's free sample files start at regular market open (09:30) with\n"
       << "a book that already has resting liquidity from before that window --\n"
@@ -49,49 +57,24 @@ void PrintUsage(const char* argv0) {
       << "regression, not the known, documented data limitation.\n";
 }
 
-}  // namespace
-
-int main(int argc, char** argv) {
-  if (argc < 3) {
-    PrintUsage(argv[0]);
-    return 2;
-  }
-
+struct Options {
   bool report_all = false;
   std::optional<int> compare_levels;
   std::size_t after_line = 0;
   std::optional<std::size_t> min_rows;
+};
 
-  for (int i = 3; i < argc; ++i) {
-    const std::string arg = argv[i];
-    if (arg == "--report-all") {
-      report_all = true;
-    } else if ((arg == "--top" || arg == "--after" || arg == "--min-rows") && i + 1 < argc) {
-      long value = 0;
-      const std::string_view digits = argv[++i];
-      if (std::from_chars(digits.data(), digits.data() + digits.size(), value).ec != std::errc{} ||
-          value <= 0) {
-        PrintUsage(argv[0]);
-        return 2;
-      }
-      if (arg == "--top") {
-        compare_levels = static_cast<int>(value);
-      } else if (arg == "--after") {
-        after_line = static_cast<std::size_t>(value);
-      } else {
-        min_rows = static_cast<std::size_t>(value);
-      }
-    } else {
-      PrintUsage(argv[0]);
-      return 2;
-    }
-  }
-
+// The actual validation run, templated on Engine so it can be
+// instantiated against ReferenceEngine or any Phase 4 optimized engine
+// (e.g. PooledMatchingEngine) without duplicating this logic — same
+// reasoning as MatchingEngine<Book> and Adapter<Engine> themselves.
+template <typename Engine>
+int Run(const char* message_path, const char* orderbook_path, const Options& options) {
   try {
-    riptide::ReferenceEngine engine;
-    riptide::lobster::Adapter adapter(engine);
-    riptide::lobster::MessageReader messages(argv[1]);
-    riptide::lobster::OrderBookFileReader orderbook(argv[2]);
+    Engine engine;
+    riptide::lobster::Adapter<Engine> adapter(engine);
+    riptide::lobster::MessageReader messages(message_path);
+    riptide::lobster::OrderBookFileReader orderbook(orderbook_path);
 
     riptide::lobster::Message message;
     riptide::lobster::BookRow row;
@@ -126,10 +109,11 @@ int main(int argc, char** argv) {
         break;
       }
 
-      const int levels = std::min(compare_levels.value_or(orderbook.levels()), orderbook.levels());
+      const int levels =
+          std::min(options.compare_levels.value_or(orderbook.levels()), orderbook.levels());
       if (!riptide::lobster::TopLevelsMatch(engine.book(), row, levels) &&
-          messages.line_number() > after_line) {
-        if (!report_all) {
+          messages.line_number() > options.after_line) {
+        if (!options.report_all) {
           std::cerr << "MISMATCH at line " << messages.line_number() << "\n"
                      << "  message: time=" << message.time << " type=" << message.event_type
                      << " order_id=" << message.order_id << " size=" << message.size
@@ -146,14 +130,14 @@ int main(int argc, char** argv) {
       ++rows_validated;
     }
 
-    if (min_rows.has_value()) {
-      const bool ok = rows_validated >= *min_rows;
+    if (options.min_rows.has_value()) {
+      const bool ok = rows_validated >= *options.min_rows;
       std::cout << (ok ? "OK" : "REGRESSION") << ": " << rows_validated
-                << " rows validated before stopping (baseline: " << *min_rows << ")\n";
+                << " rows validated before stopping (baseline: " << *options.min_rows << ")\n";
       return ok ? 0 : 1;
     }
 
-    if (report_all) {
+    if (options.report_all) {
       std::cout << "DONE: " << rows_validated << " rows checked, " << mismatches
                 << " mismatches (row 1 used to bootstrap pre-existing book state)\n";
       return mismatches == 0 ? 0 : 1;
@@ -169,4 +153,52 @@ int main(int argc, char** argv) {
     std::cerr << "FATAL: " << e.what() << "\n";
     return 1;
   }
+}
+
+}  // namespace
+
+int main(int argc, char** argv) {
+  if (argc < 3) {
+    PrintUsage(argv[0]);
+    return 2;
+  }
+
+  Options options;
+  std::string engine_name = "reference";
+
+  for (int i = 3; i < argc; ++i) {
+    const std::string arg = argv[i];
+    if (arg == "--report-all") {
+      options.report_all = true;
+    } else if (arg == "--engine" && i + 1 < argc) {
+      engine_name = argv[++i];
+    } else if ((arg == "--top" || arg == "--after" || arg == "--min-rows") && i + 1 < argc) {
+      long value = 0;
+      const std::string_view digits = argv[++i];
+      if (std::from_chars(digits.data(), digits.data() + digits.size(), value).ec != std::errc{} ||
+          value <= 0) {
+        PrintUsage(argv[0]);
+        return 2;
+      }
+      if (arg == "--top") {
+        options.compare_levels = static_cast<int>(value);
+      } else if (arg == "--after") {
+        options.after_line = static_cast<std::size_t>(value);
+      } else {
+        options.min_rows = static_cast<std::size_t>(value);
+      }
+    } else {
+      PrintUsage(argv[0]);
+      return 2;
+    }
+  }
+
+  if (engine_name == "reference") {
+    return Run<riptide::ReferenceEngine>(argv[1], argv[2], options);
+  }
+  if (engine_name == "pooled") {
+    return Run<riptide::PooledMatchingEngine>(argv[1], argv[2], options);
+  }
+  std::cerr << "ERROR: unrecognized --engine value \"" << engine_name << "\" (expected reference or pooled)\n";
+  return 2;
 }
