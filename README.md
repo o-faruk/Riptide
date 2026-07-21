@@ -3,9 +3,9 @@
 A low-latency limit-order-book matching engine and event-driven backtester,
 built in modern C++.
 
-**Status: Phase 3 (benchmark methodology) complete; Phase 4 (latency
-engineering) next.** This README is a stub and will be rewritten properly
-in Phase 6 — see `docs/DESIGN.md` and `bench/ENVIRONMENT.md` for the real
+**Status: Phase 4 (latency engineering) in progress.** This README is a
+stub and will be rewritten properly in Phase 6 — see `docs/DESIGN.md`,
+`bench/ENVIRONMENT.md`, and `docs/OPTIMIZATION_LOG.md` for the real
 detail in the meantime.
 
 ## Correctness, so far
@@ -78,6 +78,6 @@ Other presets: `relwithdebinfo`, `release`, `asan`, `ubsan`, `tsan`.
 1. Matching engine — correctness only, no optimization — done
 2. LOBSTER validation gate — the correctness bar the project must clear — done
 3. Honest benchmark methodology — harness built, baselines captured (AAPL/AMZN/MSFT + crossing micro-benchmarks) — done
-4. Latency engineering — profiled, incremental, logged
+4. Latency engineering — profiled, incremental, logged *(current — reference engine frozen, differential test + fuzzer built, real profiling pending on target hardware)*
 5. Event-driven backtester
 6. Documentation and presentation

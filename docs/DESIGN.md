@@ -140,3 +140,71 @@ tests independently establish the engine's crossing/FIFO/cancel/modify
 correctness, and every divergence found here was traced to a specific,
 named, reproducible cause in the data (documented above), not left
 unexplained.
+
+## Phase 3 — benchmark methodology
+
+Full writeup lives in `bench/ENVIRONMENT.md` rather than here, since it's
+inherently tied to a specific machine and needs updating whenever that
+machine changes (which it did — see that file's account of the project's
+original target laptop breaking mid-project). Headline design decisions:
+`std::chrono::steady_clock` over `rdtscp` (portability across the ARM64
+dev machine and x86_64 target, plus a modern Linux's `CLOCK_MONOTONIC` is
+typically TSC-backed anyway), timer overhead measured and subtracted
+rather than assumed away, and two deliberately separate measurement tools
+— real-data replay for realistic New/Cancel/Modify latency, a synthetic
+Google Benchmark sweep for crossing cost specifically, since real LOBSTER
+`type-1` rows structurally never cross (see the Phase 2 section above) and
+so real-data replay alone can't measure that path at all.
+
+## Phase 4 — latency engineering
+
+### Keeping a reference to diff against
+
+`include/riptide/matching_engine.hpp` now exports
+`using ReferenceEngine = MatchingEngine;` — not a rename, a designation.
+From this point on, `MatchingEngine`/`ReferenceEngine` is frozen (bug
+fixes only, never an optimization); every Phase 4 structural change
+(order pool, intrusive lists, flat price-level array, …) belongs in a
+new, separate engine type. The moment the reference implementation's own
+behavior could change, "diff the optimized engine against the reference"
+stops meaning anything.
+
+### Two different kinds of randomized testing, one shared generator
+
+`fuzz/random_sequence.cpp` generates deterministic (seeded), realistic
+mixes of new/cancel/modify operations — biased toward a narrow price
+range on purpose, so submitted orders collide and cross far more often
+than a wide realistic range would, exercising FIFO ordering, multi-level
+sweeps, and partial fills much harder than sparse random data would.
+`tests/differential_test.cpp` uses it for **seed-driven, reproducible**
+sequences: right now Reference-vs-itself (proving the harness is correct
+on a case with a known answer before there's a second engine to diff),
+becoming Optimized-vs-Reference the moment Phase 4 produces one.
+
+The fuzz target (`fuzz/fuzz_target.cpp`) deliberately does *not* reuse
+that seed-driven generator — it builds operations directly from the
+fuzzer's raw byte stream (`fuzz/byte_stream.hpp`) instead, field by
+field. That's what makes libFuzzer's coverage-guided mutation work at
+all: a small mutation to the input bytes needs to produce a small change
+in the resulting operation sequence, so the fuzzer can incrementally
+discover inputs that reach new code paths. Deriving operations from a
+hashed seed (fine for the differential test, where reproducibility
+matters more than mutation-friendliness) would make adjacent inputs
+produce unrelated sequences and defeat that.
+
+The fuzz target also compiles as an ordinary, portable executable by
+default (a `main()` that replays one or more files' bytes once each) —
+real fuzzing needs `-fsanitize=fuzzer`, which needs mainline Clang, not
+the AppleClang on this project's dev machine, so the default build mode
+is what let this get smoke-tested (50 random inputs, clean under ASan
+and UBSan) before ever reaching a machine that can actually fuzz it.
+Build with `-DRIPTIDE_FUZZ_WITH_LIBFUZZER=ON` and a mainline Clang for
+real coverage-guided fuzzing.
+
+### The optimization loop
+
+See `docs/OPTIMIZATION_LOG.md` for the actual loop and its entries.
+Every candidate optimization gets profiled first against the real Phase
+3 baseline, on the real target machine — not guessed at from this dev
+machine, which (per `bench/ENVIRONMENT.md`) has no bearing on the
+project's real performance numbers.

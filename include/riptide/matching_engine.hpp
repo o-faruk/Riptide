@@ -50,4 +50,13 @@ class MatchingEngine {
   Sequence next_sequence_ = 1;
 };
 
+// From Phase 4 onward, this name is what optimized engines get diffed
+// against (see tests/differential_test.cpp and docs/OPTIMIZATION_LOG.md).
+// MatchingEngine itself is frozen as of this point: bug fixes only, never
+// an optimization — the moment its own behavior can change, "diff against
+// the reference" stops meaning anything. Any Phase 4 structural change
+// (order pool, intrusive lists, flat price-level array, etc.) belongs in
+// a new, separate engine type, not in this class.
+using ReferenceEngine = MatchingEngine;
+
 }  // namespace riptide

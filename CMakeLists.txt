@@ -25,6 +25,7 @@ include(cmake/CompilerWarnings.cmake)
 add_subdirectory(src)
 add_subdirectory(tools/lobster)  # shared by tools/validate and bench/
 add_subdirectory(bench)
+add_subdirectory(fuzz)  # shared by the differential test and the fuzz target
 
 if(RIPTIDE_BUILD_TESTS)
   enable_testing()
